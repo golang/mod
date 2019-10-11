@@ -7,9 +7,9 @@ package sumdb
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 
+	"golang.org/x/mod/module"
 	"golang.org/x/mod/sumdb/note"
 	"golang.org/x/mod/sumdb/tlog"
 )
@@ -75,7 +75,8 @@ func (s *TestServer) ReadRecords(ctx context.Context, id, n int64) ([][]byte, er
 	return list, nil
 }
 
-func (s *TestServer) Lookup(ctx context.Context, key string) (int64, error) {
+func (s *TestServer) Lookup(ctx context.Context, m module.Version) (int64, error) {
+	key := m.String()
 	s.mu.Lock()
 	id, ok := s.lookup[key]
 	s.mu.Unlock()
@@ -84,12 +85,7 @@ func (s *TestServer) Lookup(ctx context.Context, key string) (int64, error) {
 	}
 
 	// Look up module and compute go.sum lines.
-	i := strings.Index(key, "@")
-	if i < 0 {
-		return 0, fmt.Errorf("invalid lookup key %q", key)
-	}
-	path, vers := key[:i], key[i+1:]
-	data, err := s.gosum(path, vers)
+	data, err := s.gosum(m.Path, m.Version)
 	if err != nil {
 		return 0, err
 	}

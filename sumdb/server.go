@@ -9,9 +9,9 @@ import (
 	"context"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 
+	"golang.org/x/mod/internal/lazyregexp"
 	"golang.org/x/mod/module"
 	"golang.org/x/mod/sumdb/tlog"
 )
@@ -61,7 +61,7 @@ var ServerPaths = []string{
 	"/tile/",
 }
 
-var modVerRE = regexp.MustCompile(`^[^@]+@v[0-9]+\.[0-9]+\.[0-9]+(-[^@]*)?(\+incompatible)?$`)
+var modVerRE = lazyregexp.New(`^[^@]+@v[0-9]+\.[0-9]+\.[0-9]+(-[^@]*)?(\+incompatible)?$`)
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
