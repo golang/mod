@@ -511,6 +511,9 @@ func MatchPathMajor(v, pathMajor string) bool {
 // CheckPathMajor returns a non-nil error if the semantic version v
 // does not match the path major version pathMajor.
 func CheckPathMajor(v, pathMajor string) error {
+	// TODO(jayconrod): return errors or panic for invalid inputs. This function
+	// (and others) was covered by integration tests for cmd/go, and surrounding
+	// code protected against invalid inputs like non-canonical versions.
 	if strings.HasPrefix(pathMajor, ".v") && strings.HasSuffix(pathMajor, "-unstable") {
 		pathMajor = strings.TrimSuffix(pathMajor, "-unstable")
 	}
