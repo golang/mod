@@ -75,6 +75,7 @@ var setRequireTests = []struct {
 			x.y/b v1.2.3
 
 			x.y/a v1.2.3
+			x.y/d v1.2.3
 		)
 		`,
 		[]struct {
@@ -157,6 +158,11 @@ func TestSetRequire(t *testing.T) {
 			}
 			if !bytes.Equal(out, golden) {
 				t.Errorf("have:\n%s\nwant:\n%s", out, golden)
+			}
+
+			f.Cleanup()
+			if len(f.Require) != len(mods) {
+				t.Errorf("after Cleanup, len(Require) = %v; want %v", len(f.Require), len(mods))
 			}
 		})
 	}
