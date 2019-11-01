@@ -8,38 +8,38 @@
 // to ensure that module zip files can be extracted consistently on supported
 // platforms and file systems.
 //
-// - All file paths within a zip file must start with "<module>@<version>/",
-//   where "<module>" is the module path and "<version>" is the version.
-//   The module path must be valid (see golang.org/x/mod/module.CheckPath).
-//   The version must be valid and canonical (see
-//   golang.org/x/mod/module.CanonicalVersion). The path must have a major
-//   version suffix consistent with the version (see
-//   golang.org/x/mod/module.Check). The part of the file path after the
-//   "<module>@<version>/" prefix must be valid (see
-//   golang.org/x/mod/module.CheckFilePath).
+// • All file paths within a zip file must start with "<module>@<version>/",
+// where "<module>" is the module path and "<version>" is the version.
+// The module path must be valid (see golang.org/x/mod/module.CheckPath).
+// The version must be valid and canonical (see
+// golang.org/x/mod/module.CanonicalVersion). The path must have a major
+// version suffix consistent with the version (see
+// golang.org/x/mod/module.Check). The part of the file path after the
+// "<module>@<version>/" prefix must be valid (see
+// golang.org/x/mod/module.CheckFilePath).
 //
-// - No two file paths may be equal under Unicode case-folding (see
-//   strings.EqualFold).
+// • No two file paths may be equal under Unicode case-folding (see
+// strings.EqualFold).
 //
-// - A go.mod file may or may not appear in the top-level directory. If present,
-//   it must be named "go.mod", not any other case. Files named "go.mod"
-//   are not allowed in any other directory.
+// • A go.mod file may or may not appear in the top-level directory. If present,
+// it must be named "go.mod", not any other case. Files named "go.mod"
+// are not allowed in any other directory.
 //
-// - The total size in bytes of a module zip file may be at most MaxZipFile
-///  bytes (500 MiB). The total uncompressed size of the files within the
-//   zip may also be at most MaxZipFile bytes.
+// • The total size in bytes of a module zip file may be at most MaxZipFile
+// bytes (500 MiB). The total uncompressed size of the files within the
+// zip may also be at most MaxZipFile bytes.
 //
-// - Each file's uncompressed size must match its declared 64-bit uncompressed
-//   size in the zip file header.
+// • Each file's uncompressed size must match its declared 64-bit uncompressed
+// size in the zip file header.
 //
-// - If the zip contains files named "<module>@<version>/go.mod" or
-//   "<module>@<version>/LICENSE", their sizes in bytes may be at most
-//   MaxGoMod or MaxLICENSE, respectively (both are 16 MiB).
+// • If the zip contains files named "<module>@<version>/go.mod" or
+// "<module>@<version>/LICENSE", their sizes in bytes may be at most
+// MaxGoMod or MaxLICENSE, respectively (both are 16 MiB).
 //
-// - Empty directories are ignored. File permissions and timestamps are also
-//   ignored.
+// • Empty directories are ignored. File permissions and timestamps are also
+// ignored.
 //
-// - Symbolic links and other irregular files are not allowed.
+// • Symbolic links and other irregular files are not allowed.
 //
 // Note that this package does not provide hashing functionality. See
 // golang.org/x/mod/sumdb/dirhash.
