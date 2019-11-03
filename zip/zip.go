@@ -98,7 +98,7 @@ type File interface {
 // Create verifies the restrictions described in the package documentation
 // and should not produce an archive that Unzip cannot extract. Create does not
 // include files in the output archive if they don't belong in the module zip.
-// In particular, Create will not include files in mdoules found in
+// In particular, Create will not include files in modules found in
 // subdirectories, most files in vendor directories, or irregular files (such
 // as symbolic links) in the output archive.
 func Create(w io.Writer, m module.Version, files []File) (err error) {
@@ -233,7 +233,7 @@ func Create(w io.Writer, m module.Version, files []File) (err error) {
 // CreateFromDir does not include files in the output archive if they don't
 // belong in the module zip. In particular, CreateFromDir will not include
 // files in modules found in subdirectories, most files in vendor directories,
-//  or irregular files (such as symbolic links) in the output archive.
+// or irregular files (such as symbolic links) in the output archive.
 func CreateFromDir(w io.Writer, m module.Version, dir string) (err error) {
 	defer func() {
 		if zerr, ok := err.(*zipError); ok {
