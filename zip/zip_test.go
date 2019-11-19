@@ -21,10 +21,10 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/mod/internal/txtar"
 	"golang.org/x/mod/module"
 	"golang.org/x/mod/sumdb/dirhash"
 	modzip "golang.org/x/mod/zip"
+	"golang.org/x/tools/txtar"
 )
 
 const emptyHash = "h1:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="
