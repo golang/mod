@@ -64,8 +64,9 @@ var addRequireTests = []struct {
 var setRequireTests = []struct {
 	in   string
 	mods []struct {
-		path string
-		vers string
+		path     string
+		vers     string
+		indirect bool
 	}
 	out string
 }{
@@ -79,17 +80,43 @@ var setRequireTests = []struct {
 		)
 		`,
 		[]struct {
-			path string
-			vers string
+			path     string
+			vers     string
+			indirect bool
 		}{
-			{"x.y/a", "v1.2.3"},
-			{"x.y/b", "v1.2.3"},
-			{"x.y/c", "v1.2.3"},
+			{"x.y/a", "v1.2.3", false},
+			{"x.y/b", "v1.2.3", false},
+			{"x.y/c", "v1.2.3", false},
 		},
 		`module m
 		require (
 			x.y/a v1.2.3
 			x.y/b v1.2.3
+			x.y/c v1.2.3
+		)
+		`,
+	},
+	{
+		`module m
+		require (
+			x.y/b v1.2.3 //
+			x.y/a v1.2.3
+			x.y/d v1.2.3
+		)
+		`,
+		[]struct {
+			path     string
+			vers     string
+			indirect bool
+		}{
+			{"x.y/a", "v1.2.3", false},
+			{"x.y/b", "v1.2.3", true},
+			{"x.y/c", "v1.2.3", false},
+		},
+		`module m
+		require (
+			x.y/a v1.2.3
+			x.y/b v1.2.3 // indirect;
 			x.y/c v1.2.3
 		)
 		`,
@@ -189,6 +216,7 @@ func TestSetRequire(t *testing.T) {
 						Path:    mod.path,
 						Version: mod.vers,
 					},
+					Indirect: mod.indirect,
 				})
 			}
 

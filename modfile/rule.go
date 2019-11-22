@@ -332,7 +332,7 @@ func setIndirect(line *Line, indirect bool) {
 		// Insert at beginning of existing comment.
 		com := &line.Suffix[0]
 		space := " "
-		if len(com.Token) > 2 && com.Token[2] == ' ' || com.Token[2] == '\t' {
+		if len(com.Token) > 2 && (com.Token[2] == ' ' || com.Token[2] == '\t') {
 			space = ""
 		}
 		com.Token = "// indirect;" + space + com.Token[2:]
