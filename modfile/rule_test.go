@@ -99,9 +99,13 @@ var setRequireTests = []struct {
 	{
 		`module m
 		require (
-			x.y/b v1.2.3 //
 			x.y/a v1.2.3
-			x.y/d v1.2.3
+			x.y/b v1.2.3 //
+			x.y/c v1.2.3 //c
+			x.y/d v1.2.3 //   c
+			x.y/e v1.2.3 // indirect
+			x.y/f v1.2.3 //indirect
+			x.y/g v1.2.3 //	indirect
 		)
 		`,
 		[]struct {
@@ -109,15 +113,23 @@ var setRequireTests = []struct {
 			vers     string
 			indirect bool
 		}{
-			{"x.y/a", "v1.2.3", false},
+			{"x.y/a", "v1.2.3", true},
 			{"x.y/b", "v1.2.3", true},
-			{"x.y/c", "v1.2.3", false},
+			{"x.y/c", "v1.2.3", true},
+			{"x.y/d", "v1.2.3", true},
+			{"x.y/e", "v1.2.3", true},
+			{"x.y/f", "v1.2.3", true},
+			{"x.y/g", "v1.2.3", true},
 		},
 		`module m
 		require (
-			x.y/a v1.2.3
-			x.y/b v1.2.3 // indirect;
-			x.y/c v1.2.3
+			x.y/a v1.2.3 // indirect
+			x.y/b v1.2.3 // indirect
+			x.y/c v1.2.3 // indirect; c
+			x.y/d v1.2.3 // indirect; c
+			x.y/e v1.2.3 // indirect
+			x.y/f v1.2.3 //indirect
+			x.y/g v1.2.3 //	indirect
 		)
 		`,
 	},
