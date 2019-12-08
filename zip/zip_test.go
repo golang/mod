@@ -271,9 +271,10 @@ func TestCreateFromDirSpecial(t *testing.T) {
 			desc: "ignore_symlink",
 			setup: func(t *testing.T, tmpDir string) string {
 				if err := os.Symlink(tmpDir, filepath.Join(tmpDir, "link")); err != nil {
-					if runtime.GOOS == "windows" {
+					switch runtime.GOOS {
+					case "plan9", "windows":
 						t.Skipf("could not create symlink: %v", err)
-					} else {
+					default:
 						t.Fatal(err)
 					}
 				}
