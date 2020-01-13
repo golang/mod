@@ -9,6 +9,7 @@ package modfile
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -333,8 +334,8 @@ type input struct {
 	endRule   int       // position of end of current rule
 
 	// Parser state.
-	file       *FileSyntax // returned top-level syntax tree
-	parseError error       // error encountered during parsing
+	file        *FileSyntax // returned top-level syntax tree
+	parseErrors ErrorList   // errors encountered during parsing
 
 	// Comment assignment state.
 	pre  []Expr // all expressions, in preorder traversal
@@ -358,19 +359,22 @@ func parse(file string, data []byte) (f *FileSyntax, err error) {
 	// Turn both into error returns. Catching bug panics is
 	// especially important when processing many files.
 	defer func() {
-		if e := recover(); e != nil {
-			if e == in.parseError {
-				err = in.parseError
-			} else {
-				err = fmt.Errorf("%s:%d:%d: internal error: %v", in.filename, in.pos.Line, in.pos.LineRune, e)
-			}
+		if e := recover(); e != nil && e != &in.parseErrors {
+			in.parseErrors = append(in.parseErrors, Error{
+				Filename: in.filename,
+				Pos:      in.pos,
+				Err:      fmt.Errorf("internal error: %v", e),
+			})
+		}
+		if err == nil && len(in.parseErrors) > 0 {
+			err = in.parseErrors
 		}
 	}()
 
 	// Invoke the parser.
 	in.parseFile()
-	if in.parseError != nil {
-		return nil, in.parseError
+	if len(in.parseErrors) > 0 {
+		return nil, in.parseErrors
 	}
 	in.file.Name = in.filename
 
@@ -387,8 +391,12 @@ func (in *input) Error(s string) {
 	if s == "syntax error" && in.lastToken != "" {
 		s += " near " + in.lastToken
 	}
-	in.parseError = fmt.Errorf("%s:%d:%d: %v", in.filename, in.pos.Line, in.pos.LineRune, s)
-	panic(in.parseError)
+	in.parseErrors = append(in.parseErrors, Error{
+		Filename: in.filename,
+		Pos:      in.pos,
+		Err:      errors.New(s),
+	})
+	panic(&in.parseErrors)
 }
 
 // eof reports whether the input has reached end of file.
@@ -518,7 +526,7 @@ func (in *input) lex(sym *symType) int {
 		}
 
 		if in.peekPrefix("/*") {
-			in.Error(fmt.Sprintf("mod files must use // comments (not /* */ comments)"))
+			in.Error("mod files must use // comments (not /* */ comments)")
 		}
 
 		// Found non-space non-comment.
@@ -587,7 +595,7 @@ func (in *input) lex(sym *symType) int {
 			break
 		}
 		if in.peekPrefix("/*") {
-			in.Error(fmt.Sprintf("mod files must use // comments (not /* */ comments)"))
+			in.Error("mod files must use // comments (not /* */ comments)")
 		}
 		in.readRune()
 	}
@@ -668,7 +676,7 @@ func (in *input) assignComments() {
 	for _, x := range in.pre {
 		start, _ := x.Span()
 		if debug {
-			fmt.Printf("pre %T :%d:%d #%d\n", x, start.Line, start.LineRune, start.Byte)
+			fmt.Fprintf(os.Stderr, "pre %T :%d:%d #%d\n", x, start.Line, start.LineRune, start.Byte)
 		}
 		xcom := x.Comment()
 		for len(line) > 0 && start.Byte >= line[0].Start.Byte {
@@ -695,7 +703,7 @@ func (in *input) assignComments() {
 
 		start, end := x.Span()
 		if debug {
-			fmt.Printf("post %T :%d:%d #%d :%d:%d #%d\n", x, start.Line, start.LineRune, start.Byte, end.Line, end.LineRune, end.Byte)
+			fmt.Fprintf(os.Stderr, "post %T :%d:%d #%d :%d:%d #%d\n", x, start.Line, start.LineRune, start.Byte, end.Line, end.LineRune, end.Byte)
 		}
 
 		// Do not assign suffix comments to end of line block or whole file.
