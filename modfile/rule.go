@@ -2,6 +2,21 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// Package modfile implements a parser and formatter for go.mod files.
+//
+// The go.mod syntax is described in
+// https://golang.org/cmd/go/#hdr-The_go_mod_file.
+//
+// The Parse and ParseLax functions both parse a go.mod file and return an
+// abstract syntax tree. ParseLax ignores unknown statements and may be used to
+// parse go.mod files that may have been developed with newer versions of Go.
+//
+// The File struct returned by Parse and ParseLax represent an abstract
+// go.mod file. File has several methods like AddNewRequire and DropReplace
+// that can be used to programmatically edit a file.
+//
+// The Format function formats a File back to a byte slice which can be
+// written to a file.
 package modfile
 
 import (
