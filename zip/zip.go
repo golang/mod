@@ -247,6 +247,9 @@ func CreateFromDir(w io.Writer, m module.Version, dir string) (err error) {
 
 	var files []File
 	err = filepath.Walk(dir, func(filePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 		relPath, err := filepath.Rel(dir, filePath)
 		if err != nil {
 			return err

@@ -89,7 +89,7 @@ func (f fakeFile) Open() (io.ReadCloser, error) {
 	if f.data != nil {
 		return ioutil.NopCloser(bytes.NewReader(f.data)), nil
 	}
-	if f.size < 0 || f.size >= uint64(modzip.MaxZipFile<<1) {
+	if f.size >= uint64(modzip.MaxZipFile<<1) {
 		return nil, fmt.Errorf("cannot open fakeFile of size %d", f.size)
 	}
 	return ioutil.NopCloser(io.LimitReader(zeroReader{}, int64(f.size))), nil
