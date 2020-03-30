@@ -222,10 +222,14 @@ func (f *File) add(errs *ErrorList, line *Line, verb string, args []string, fix 
 			errorf("repeated go statement")
 			return
 		}
-		if len(args) != 1 || !GoVersionRE.MatchString(args[0]) {
-			errorf("usage: go 1.23")
+		if len(args) != 1 {
+			errorf("go directive expects exactly one argument")
+			return
+		} else if !GoVersionRE.MatchString(args[0]) {
+			errorf("invalid go version '%s': must match format 1.23", args[0])
 			return
 		}
+
 		f.Go = &Go{Syntax: line}
 		f.Go.Version = args[0]
 	case "module":
