@@ -30,7 +30,12 @@ func TestPrintGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, out := range outs {
-		testPrint(t, out, out)
+		out := out
+		name := strings.TrimSuffix(filepath.Base(out), ".golden")
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			testPrint(t, out, out)
+		})
 	}
 }
 
@@ -63,6 +68,48 @@ func testPrint(t *testing.T, in, out string) {
 		t.Errorf("formatted %s incorrectly: diff shows -golden, +ours", base)
 		tdiff(t, string(golden), string(ndata))
 		return
+	}
+}
+
+// TestParsePunctuation verifies that certain ASCII punctuation characters
+// (brackets, commas) are lexed as separate tokens, even when they're
+// surrounded by identifier characters.
+func TestParsePunctuation(t *testing.T) {
+	for _, test := range []struct {
+		desc, src, want string
+	}{
+		{"paren", "require ()", "require ( )"},
+		{"brackets", "require []{},", "require [ ] { } ,"},
+		{"mix", "require a[b]c{d}e,", "require a [ b ] c { d } e ,"},
+		{"block_mix", "require (\n\ta[b]\n)", "require ( a [ b ] )"},
+		{"interval", "require [v1.0.0, v1.1.0)", "require [ v1.0.0 , v1.1.0 )"},
+	} {
+		t.Run(test.desc, func(t *testing.T) {
+			f, err := parse("go.mod", []byte(test.src))
+			if err != nil {
+				t.Fatalf("parsing %q: %v", test.src, err)
+			}
+			var tokens []string
+			for _, stmt := range f.Stmt {
+				switch stmt := stmt.(type) {
+				case *Line:
+					tokens = append(tokens, stmt.Token...)
+				case *LineBlock:
+					tokens = append(tokens, stmt.Token...)
+					tokens = append(tokens, "(")
+					for _, line := range stmt.Line {
+						tokens = append(tokens, line.Token...)
+					}
+					tokens = append(tokens, ")")
+				default:
+					t.Fatalf("parsing %q: unexpected statement of type %T", test.src, stmt)
+				}
+			}
+			got := strings.Join(tokens, " ")
+			if got != test.want {
+				t.Errorf("parsing %q: got %q, want %q", test.src, got, test.want)
+			}
+		})
 	}
 }
 
@@ -103,77 +150,76 @@ func TestPrintParse(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, out := range outs {
-		data, err := ioutil.ReadFile(out)
-		if err != nil {
-			t.Error(err)
-			continue
-		}
-
-		base := "testdata/" + filepath.Base(out)
-		f, err := parse(base, data)
-		if err != nil {
-			t.Errorf("parsing original: %v", err)
-			continue
-		}
-
-		ndata := Format(f)
-		f2, err := parse(base, ndata)
-		if err != nil {
-			t.Errorf("parsing reformatted: %v", err)
-			continue
-		}
-
-		eq := eqchecker{file: base}
-		if err := eq.check(f, f2); err != nil {
-			t.Errorf("not equal (parse/Format/parse): %v", err)
-		}
-
-		pf1, err := Parse(base, data, nil)
-		if err != nil {
-			switch base {
-			case "testdata/replace2.in", "testdata/gopkg.in.golden":
-				t.Errorf("should parse %v: %v", base, err)
-			}
-		}
-		if err == nil {
-			pf2, err := Parse(base, ndata, nil)
+		out := out
+		name := filepath.Base(out)
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			data, err := ioutil.ReadFile(out)
 			if err != nil {
-				t.Errorf("Parsing reformatted: %v", err)
-				continue
+				t.Fatal(err)
 			}
+
+			base := "testdata/" + filepath.Base(out)
+			f, err := parse(base, data)
+			if err != nil {
+				t.Fatalf("parsing original: %v", err)
+			}
+
+			ndata := Format(f)
+			f2, err := parse(base, ndata)
+			if err != nil {
+				t.Fatalf("parsing reformatted: %v", err)
+			}
+
 			eq := eqchecker{file: base}
-			if err := eq.check(pf1, pf2); err != nil {
-				t.Errorf("not equal (parse/Format/Parse): %v", err)
+			if err := eq.check(f, f2); err != nil {
+				t.Errorf("not equal (parse/Format/parse): %v", err)
 			}
 
-			ndata2, err := pf1.Format()
+			pf1, err := Parse(base, data, nil)
 			if err != nil {
-				t.Errorf("reformat: %v", err)
+				switch base {
+				case "testdata/replace2.in", "testdata/gopkg.in.golden":
+					t.Errorf("should parse %v: %v", base, err)
+				}
 			}
-			pf3, err := Parse(base, ndata2, nil)
-			if err != nil {
-				t.Errorf("Parsing reformatted2: %v", err)
-				continue
-			}
-			eq = eqchecker{file: base}
-			if err := eq.check(pf1, pf3); err != nil {
-				t.Errorf("not equal (Parse/Format/Parse): %v", err)
-			}
-			ndata = ndata2
-		}
+			if err == nil {
+				pf2, err := Parse(base, ndata, nil)
+				if err != nil {
+					t.Fatalf("Parsing reformatted: %v", err)
+				}
+				eq := eqchecker{file: base}
+				if err := eq.check(pf1, pf2); err != nil {
+					t.Errorf("not equal (parse/Format/Parse): %v", err)
+				}
 
-		if strings.HasSuffix(out, ".in") {
-			golden, err := ioutil.ReadFile(strings.TrimSuffix(out, ".in") + ".golden")
-			if err != nil {
-				t.Error(err)
-				continue
+				ndata2, err := pf1.Format()
+				if err != nil {
+					t.Errorf("reformat: %v", err)
+				}
+				pf3, err := Parse(base, ndata2, nil)
+				if err != nil {
+					t.Fatalf("Parsing reformatted2: %v", err)
+				}
+				eq = eqchecker{file: base}
+				if err := eq.check(pf1, pf3); err != nil {
+					t.Errorf("not equal (Parse/Format/Parse): %v", err)
+				}
+				ndata = ndata2
 			}
-			if !bytes.Equal(ndata, golden) {
-				t.Errorf("formatted %s incorrectly: diff shows -golden, +ours", base)
-				tdiff(t, string(golden), string(ndata))
-				return
+
+			if strings.HasSuffix(out, ".in") {
+				golden, err := ioutil.ReadFile(strings.TrimSuffix(out, ".in") + ".golden")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(ndata, golden) {
+					t.Errorf("formatted %s incorrectly: diff shows -golden, +ours", base)
+					tdiff(t, string(golden), string(ndata))
+					return
+				}
 			}
-		}
+		})
 	}
 }
 

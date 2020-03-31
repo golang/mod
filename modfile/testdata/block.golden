@@ -5,7 +5,8 @@ x "y" z
 block ( // block-eol
 	// x-before-line
 
-	"x" ( y // x-eol
+	"x" (y // x-eol
+	"x") y // y-eol
 	"x1"
 	"x2"
 	// line
@@ -20,10 +21,16 @@ block ( // block-eol
 	"z" // z-eol
 ) // block-eol2
 
-block2 (
-	x
-	y
-	z
+block1 (
 )
+
+block2 (x y z)
+
+block3 "w" (
+) // empty block
+
+block4 "x" () "y" // not a block
+
+block5 ("z" // also not a block
 
 // eof

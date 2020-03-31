@@ -417,8 +417,19 @@ func IsDirectoryPath(ns string) bool {
 // a single token in a go.mod line.
 func MustQuote(s string) bool {
 	for _, r := range s {
-		if !unicode.IsPrint(r) || r == ' ' || r == '"' || r == '\'' || r == '`' {
+		switch r {
+		case ' ', '"', '\'', '`':
 			return true
+
+		case '(', ')', '[', ']', '{', '}', ',':
+			if len(s) > 1 {
+				return true
+			}
+
+		default:
+			if !unicode.IsPrint(r) {
+				return true
+			}
 		}
 	}
 	return s == "" || strings.Contains(s, "//") || strings.Contains(s, "/*")
