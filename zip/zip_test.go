@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -726,6 +727,9 @@ func TestVCS(t *testing.T) {
 		t.Skip()
 	}
 
+	var downloadErrorCount int32
+	const downloadErrorLimit = 3
+
 	haveVCS := make(map[string]bool)
 	for _, vcs := range []string{"git", "hg"} {
 		_, err := exec.LookPath(vcs)
@@ -941,7 +945,18 @@ func TestVCS(t *testing.T) {
 			repo, dl, cleanup, err := downloadVCSZip(test.vcs, test.url, test.rev, test.subdir)
 			defer cleanup()
 			if err != nil {
-				t.Fatal(err)
+				// This may fail if there's a problem with the network or upstream
+				// repository. The package being tested doesn't directly interact with
+				// VCS tools; the test just does this to simulate what the go command
+				// does. So an error should cause a skip instead of a failure. But we
+				// should fail after too many errors so we don't lose test coverage
+				// when something changes permanently.
+				n := atomic.AddInt32(&downloadErrorCount, 1)
+				if n < downloadErrorLimit {
+					t.Skipf("failed to download zip from repository: %v", err)
+				} else {
+					t.Fatalf("failed to download zip from repository (repeated failure): %v", err)
+				}
 			}
 
 			// Create a module zip from that archive.
