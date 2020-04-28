@@ -74,10 +74,23 @@ func TestParseLax(t *testing.T) {
 		)
 		exclude v1.2.3
 		replace <-!!!
+		retract v1.2.3 v1.2.4
+		retract (v1.2.3, v1.2.4]
+		retract v1.2.3 (
+			key1 value1
+			key2 value2
+		)
+		require good v1.0.0
 	`)
-	_, err := ParseLax("file", badFile, nil)
+	f, err := ParseLax("file", badFile, nil)
 	if err != nil {
 		t.Fatalf("ParseLax did not ignore irrelevant errors: %v", err)
+	}
+	if f.Module == nil || f.Module.Mod.Path != "m" {
+		t.Errorf("module directive was not parsed")
+	}
+	if len(f.Require) != 1 || f.Require[0].Mod.Path != "good" {
+		t.Errorf("require directive at end of file was not parsed")
 	}
 }
 
