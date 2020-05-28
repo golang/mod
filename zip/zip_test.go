@@ -78,6 +78,57 @@ func readTest(file string) (testParams, error) {
 	return test, nil
 }
 
+func extractTxtarToTempDir(arc *txtar.Archive) (dir string, err error) {
+	dir, err = ioutil.TempDir("", "zip_test-*")
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if err != nil {
+			os.RemoveAll(dir)
+		}
+	}()
+	for _, f := range arc.Files {
+		filePath := filepath.Join(dir, f.Name)
+		if err := os.MkdirAll(filepath.Dir(filePath), 0777); err != nil {
+			return "", err
+		}
+		if err := ioutil.WriteFile(filePath, f.Data, 0666); err != nil {
+			return "", err
+		}
+	}
+	return dir, nil
+}
+
+func extractTxtarToTempZip(arc *txtar.Archive) (zipPath string, err error) {
+	zipFile, err := ioutil.TempFile("", "zip_test-*.zip")
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if cerr := zipFile.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+		if err != nil {
+			os.Remove(zipFile.Name())
+		}
+	}()
+	zw := zip.NewWriter(zipFile)
+	for _, f := range arc.Files {
+		zf, err := zw.Create(f.Name)
+		if err != nil {
+			return "", err
+		}
+		if _, err := zf.Write(f.Data); err != nil {
+			return "", err
+		}
+	}
+	if err := zw.Close(); err != nil {
+		return "", err
+	}
+	return zipFile.Name(), nil
+}
+
 type fakeFile struct {
 	name string
 	size uint64
@@ -114,6 +165,211 @@ func (r zeroReader) Read(b []byte) (int, error) {
 		b[i] = 0
 	}
 	return len(b), nil
+}
+
+func formatCheckedFiles(cf modzip.CheckedFiles) string {
+	buf := &bytes.Buffer{}
+	fmt.Fprintf(buf, "valid:\n")
+	for _, f := range cf.Valid {
+		fmt.Fprintln(buf, f)
+	}
+	fmt.Fprintf(buf, "\nomitted:\n")
+	for _, f := range cf.Omitted {
+		fmt.Fprintf(buf, "%s: %v\n", f.Path, f.Err)
+	}
+	fmt.Fprintf(buf, "\ninvalid:\n")
+	for _, f := range cf.Invalid {
+		fmt.Fprintf(buf, "%s: %v\n", f.Path, f.Err)
+	}
+	return buf.String()
+}
+
+// TestCheckFiles verifies behavior of CheckFiles. Note that CheckFiles is also
+// covered by TestCreate, TestCreateDir, and TestCreateSizeLimits, so this test
+// focuses on how multiple errors and omissions are reported, rather than trying
+// to cover every case.
+func TestCheckFiles(t *testing.T) {
+	testPaths, err := filepath.Glob(filepath.FromSlash("testdata/check_files/*.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, testPath := range testPaths {
+		testPath := testPath
+		name := strings.TrimSuffix(filepath.Base(testPath), ".txt")
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Load the test.
+			test, err := readTest(testPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			files := make([]modzip.File, 0, len(test.archive.Files))
+			var want string
+			for _, tf := range test.archive.Files {
+				if tf.Name == "want" {
+					want = string(tf.Data)
+					continue
+				}
+				files = append(files, fakeFile{
+					name: tf.Name,
+					size: uint64(len(tf.Data)),
+					data: tf.Data,
+				})
+			}
+
+			// Check the files.
+			cf, _ := modzip.CheckFiles(files)
+			got := formatCheckedFiles(cf)
+			if got != want {
+				t.Errorf("got:\n%s\n\nwant:\n%s", got, want)
+			}
+
+			// Check that the error (if any) is just a list of invalid files.
+			// SizeError is not covered in this test.
+			var gotErr, wantErr string
+			if len(cf.Invalid) > 0 {
+				wantErr = modzip.FileErrorList(cf.Invalid).Error()
+			}
+			if err := cf.Err(); err != nil {
+				gotErr = err.Error()
+			}
+			if gotErr != wantErr {
+				t.Errorf("got error:\n%s\n\nwant error:\n%s", gotErr, wantErr)
+			}
+		})
+	}
+}
+
+// TestCheckDir verifies behavior of the CheckDir function. Note that CheckDir
+// relies on CheckFiles and listFilesInDir (called by CreateFromDir), so this
+// test focuses on how multiple errors and omissions are reported, rather than
+// trying to cover every case.
+func TestCheckDir(t *testing.T) {
+	testPaths, err := filepath.Glob(filepath.FromSlash("testdata/check_dir/*.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, testPath := range testPaths {
+		testPath := testPath
+		name := strings.TrimSuffix(filepath.Base(testPath), ".txt")
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Load the test and extract the files to a temporary directory.
+			test, err := readTest(testPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var want string
+			for i, f := range test.archive.Files {
+				if f.Name == "want" {
+					want = string(f.Data)
+					test.archive.Files = append(test.archive.Files[:i], test.archive.Files[i+1:]...)
+					break
+				}
+			}
+			tmpDir, err := extractTxtarToTempDir(test.archive)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				if err := os.RemoveAll(tmpDir); err != nil {
+					t.Errorf("removing temp directory: %v", err)
+				}
+			}()
+
+			// Check the directory.
+			cf, err := modzip.CheckDir(tmpDir)
+			if err != nil && err.Error() != cf.Err().Error() {
+				// I/O error
+				t.Fatal(err)
+			}
+			rep := strings.NewReplacer(tmpDir, "$work", `'\''`, `'\''`, string(os.PathSeparator), "/")
+			got := rep.Replace(formatCheckedFiles(cf))
+			if got != want {
+				t.Errorf("got:\n%s\n\nwant:\n%s", got, want)
+			}
+
+			// Check that the error (if any) is just a list of invalid files.
+			// SizeError is not covered in this test.
+			var gotErr, wantErr string
+			if len(cf.Invalid) > 0 {
+				wantErr = modzip.FileErrorList(cf.Invalid).Error()
+			}
+			if err := cf.Err(); err != nil {
+				gotErr = err.Error()
+			}
+			if gotErr != wantErr {
+				t.Errorf("got error:\n%s\n\nwant error:\n%s", gotErr, wantErr)
+			}
+		})
+	}
+}
+
+// TestCheckZip verifies behavior of CheckZip. Note that CheckZip is also
+// covered by TestUnzip, so this test focuses on how multiple errors are
+// reported, rather than trying to cover every case.
+func TestCheckZip(t *testing.T) {
+	testPaths, err := filepath.Glob(filepath.FromSlash("testdata/check_zip/*.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, testPath := range testPaths {
+		testPath := testPath
+		name := strings.TrimSuffix(filepath.Base(testPath), ".txt")
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Load the test and extract the files to a temporary zip file.
+			test, err := readTest(testPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var want string
+			for i, f := range test.archive.Files {
+				if f.Name == "want" {
+					want = string(f.Data)
+					test.archive.Files = append(test.archive.Files[:i], test.archive.Files[i+1:]...)
+					break
+				}
+			}
+			tmpZipPath, err := extractTxtarToTempZip(test.archive)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				if err := os.Remove(tmpZipPath); err != nil {
+					t.Errorf("removing temp zip file: %v", err)
+				}
+			}()
+
+			// Check the zip.
+			m := module.Version{Path: test.path, Version: test.version}
+			cf, err := modzip.CheckZip(m, tmpZipPath)
+			if err != nil && err.Error() != cf.Err().Error() {
+				// I/O error
+				t.Fatal(err)
+			}
+			got := formatCheckedFiles(cf)
+			if got != want {
+				t.Errorf("got:\n%s\n\nwant:\n%s", got, want)
+			}
+
+			// Check that the error (if any) is just a list of invalid files.
+			// SizeError is not covered in this test.
+			var gotErr, wantErr string
+			if len(cf.Invalid) > 0 {
+				wantErr = modzip.FileErrorList(cf.Invalid).Error()
+			}
+			if err := cf.Err(); err != nil {
+				gotErr = err.Error()
+			}
+			if gotErr != wantErr {
+				t.Errorf("got error:\n%s\n\nwant error:\n%s", gotErr, wantErr)
+			}
+		})
+	}
 }
 
 func TestCreate(t *testing.T) {
@@ -205,20 +461,15 @@ func TestCreateFromDir(t *testing.T) {
 			}
 
 			// Write files to a temporary directory.
-			tmpDir, err := ioutil.TempDir("", "TestCreateFromDir")
+			tmpDir, err := extractTxtarToTempDir(test.archive)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer os.RemoveAll(tmpDir)
-			for _, f := range test.archive.Files {
-				filePath := filepath.Join(tmpDir, f.Name)
-				if err := os.MkdirAll(filepath.Dir(filePath), 0777); err != nil {
-					t.Fatal(err)
+			defer func() {
+				if err := os.RemoveAll(tmpDir); err != nil {
+					t.Errorf("removing temp directory: %v", err)
 				}
-				if err := ioutil.WriteFile(filePath, f.Data, 0666); err != nil {
-					t.Fatal(err)
-				}
-			}
+			}()
 
 			// Create zip from the directory.
 			tmpZip, err := ioutil.TempFile("", "TestCreateFromDir-*.zip")
@@ -353,31 +604,15 @@ func TestUnzip(t *testing.T) {
 			}
 
 			// Convert txtar to temporary zip file.
-			tmpZipFile, err := ioutil.TempFile("", "TestUnzip-*.zip")
+			tmpZipPath, err := extractTxtarToTempZip(test.archive)
 			if err != nil {
 				t.Fatal(err)
 			}
-			tmpZipPath := tmpZipFile.Name()
 			defer func() {
-				tmpZipFile.Close()
-				os.Remove(tmpZipPath)
+				if err := os.Remove(tmpZipPath); err != nil {
+					t.Errorf("removing temp zip file: %v", err)
+				}
 			}()
-			zw := zip.NewWriter(tmpZipFile)
-			for _, f := range test.archive.Files {
-				zf, err := zw.Create(f.Name)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if _, err := zf.Write(f.Data); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if err := zw.Close(); err != nil {
-				t.Fatal(err)
-			}
-			if err := tmpZipFile.Close(); err != nil {
-				t.Fatal(err)
-			}
 
 			// Extract to a temporary directory.
 			tmpDir, err := ioutil.TempDir("", "TestUnzip")
@@ -410,9 +645,13 @@ func TestUnzip(t *testing.T) {
 }
 
 type sizeLimitTest struct {
-	desc                                 string
-	files                                []modzip.File
-	wantErr, wantCreateErr, wantUnzipErr string
+	desc              string
+	files             []modzip.File
+	wantErr           string
+	wantCheckFilesErr string
+	wantCreateErr     string
+	wantCheckZipErr   string
+	wantUnzipErr      string
 }
 
 // sizeLimitTests is shared by TestCreateSizeLimits and TestUnzipSizeLimits.
@@ -429,8 +668,10 @@ var sizeLimitTests = [...]sizeLimitTest{
 			name: "large.go",
 			size: modzip.MaxZipFile + 1,
 		}},
-		wantCreateErr: "module source tree too large",
-		wantUnzipErr:  "total uncompressed size of module contents too large",
+		wantCheckFilesErr: "module source tree too large",
+		wantCreateErr:     "module source tree too large",
+		wantCheckZipErr:   "total uncompressed size of module contents too large",
+		wantUnzipErr:      "total uncompressed size of module contents too large",
 	}, {
 		desc: "total_large",
 		files: []modzip.File{
@@ -455,8 +696,10 @@ var sizeLimitTests = [...]sizeLimitTest{
 				size: modzip.MaxZipFile - 9,
 			},
 		},
-		wantCreateErr: "module source tree too large",
-		wantUnzipErr:  "total uncompressed size of module contents too large",
+		wantCheckFilesErr: "module source tree too large",
+		wantCreateErr:     "module source tree too large",
+		wantCheckZipErr:   "total uncompressed size of module contents too large",
+		wantUnzipErr:      "total uncompressed size of module contents too large",
 	}, {
 		desc: "large_gomod",
 		files: []modzip.File{fakeFile{
@@ -508,23 +751,36 @@ func TestCreateSizeLimits(t *testing.T) {
 			size: 1,
 			data: []byte(`package large`),
 		}},
-		wantErr: "larger than declared size",
+		wantCreateErr: "larger than declared size",
 	})
 
 	for _, test := range tests {
 		test := test
 		t.Run(test.desc, func(t *testing.T) {
 			t.Parallel()
-			wantErr := test.wantCreateErr
-			if wantErr == "" {
-				wantErr = test.wantErr
+
+			wantCheckFilesErr := test.wantCheckFilesErr
+			if wantCheckFilesErr == "" {
+				wantCheckFilesErr = test.wantErr
 			}
-			if err := modzip.Create(ioutil.Discard, sizeLimitVersion, test.files); err == nil && wantErr != "" {
-				t.Fatalf("unexpected success; want error containing %q", wantErr)
-			} else if err != nil && wantErr == "" {
-				t.Fatalf("got error %q; want success", err)
-			} else if err != nil && !strings.Contains(err.Error(), wantErr) {
-				t.Fatalf("got error %q; want error containing %q", err, wantErr)
+			if _, err := modzip.CheckFiles(test.files); err == nil && wantCheckFilesErr != "" {
+				t.Fatalf("CheckFiles: unexpected success; want error containing %q", wantCheckFilesErr)
+			} else if err != nil && wantCheckFilesErr == "" {
+				t.Fatalf("CheckFiles: got error %q; want success", err)
+			} else if err != nil && !strings.Contains(err.Error(), wantCheckFilesErr) {
+				t.Fatalf("CheckFiles: got error %q; want error containing %q", err, wantCheckFilesErr)
+			}
+
+			wantCreateErr := test.wantCreateErr
+			if wantCreateErr == "" {
+				wantCreateErr = test.wantErr
+			}
+			if err := modzip.Create(ioutil.Discard, sizeLimitVersion, test.files); err == nil && wantCreateErr != "" {
+				t.Fatalf("Create: unexpected success; want error containing %q", wantCreateErr)
+			} else if err != nil && wantCreateErr == "" {
+				t.Fatalf("Create: got error %q; want success", err)
+			} else if err != nil && !strings.Contains(err.Error(), wantCreateErr) {
+				t.Fatalf("Create: got error %q; want error containing %q", err, wantCreateErr)
 			}
 		})
 	}
@@ -545,7 +801,9 @@ func TestUnzipSizeLimits(t *testing.T) {
 			tmpZipPath := tmpZipFile.Name()
 			defer func() {
 				tmpZipFile.Close()
-				os.Remove(tmpZipPath)
+				if err := os.Remove(tmpZipPath); err != nil {
+					t.Errorf("removing temp zip file: %v", err)
+				}
 			}()
 
 			zw := zip.NewWriter(tmpZipFile)
@@ -576,17 +834,38 @@ func TestUnzipSizeLimits(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer os.RemoveAll(tmpDir)
-			wantErr := test.wantUnzipErr
-			if wantErr == "" {
-				wantErr = test.wantErr
+			defer func() {
+				if err := os.RemoveAll(tmpDir); err != nil {
+					t.Errorf("removing temp dir: %v", err)
+				}
+			}()
+
+			wantCheckZipErr := test.wantCheckZipErr
+			if wantCheckZipErr == "" {
+				wantCheckZipErr = test.wantErr
 			}
-			if err := modzip.Unzip(tmpDir, sizeLimitVersion, tmpZipPath); err == nil && wantErr != "" {
-				t.Fatalf("unexpected success; want error containing %q", wantErr)
-			} else if err != nil && wantErr == "" {
-				t.Fatalf("got error %q; want success", err)
-			} else if err != nil && !strings.Contains(err.Error(), wantErr) {
-				t.Fatalf("got error %q; want error containing %q", err, wantErr)
+			cf, err := modzip.CheckZip(sizeLimitVersion, tmpZipPath)
+			if err == nil {
+				err = cf.Err()
+			}
+			if err == nil && wantCheckZipErr != "" {
+				t.Fatalf("CheckZip: unexpected success; want error containing %q", wantCheckZipErr)
+			} else if err != nil && wantCheckZipErr == "" {
+				t.Fatalf("CheckZip: got error %q; want success", err)
+			} else if err != nil && !strings.Contains(err.Error(), wantCheckZipErr) {
+				t.Fatalf("CheckZip: got error %q; want error containing %q", err, wantCheckZipErr)
+			}
+
+			wantUnzipErr := test.wantUnzipErr
+			if wantUnzipErr == "" {
+				wantUnzipErr = test.wantErr
+			}
+			if err := modzip.Unzip(tmpDir, sizeLimitVersion, tmpZipPath); err == nil && wantUnzipErr != "" {
+				t.Fatalf("Unzip: unexpected success; want error containing %q", wantUnzipErr)
+			} else if err != nil && wantUnzipErr == "" {
+				t.Fatalf("Unzip: got error %q; want success", err)
+			} else if err != nil && !strings.Contains(err.Error(), wantUnzipErr) {
+				t.Fatalf("Unzip: got error %q; want error containing %q", err, wantUnzipErr)
 			}
 		})
 	}
