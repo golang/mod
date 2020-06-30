@@ -445,3 +445,120 @@ func TestGoVersion(t *testing.T) {
 		})
 	}
 }
+
+func TestComments(t *testing.T) {
+	for _, test := range []struct {
+		desc, input, want string
+	}{
+		{
+			desc: "comment_only",
+			input: `
+// a
+// b
+`,
+			want: `
+comments before "// a"
+comments before "// b"
+`,
+		}, {
+			desc: "line",
+			input: `
+// a
+
+// b
+module m // c
+// d
+
+// e
+`,
+			want: `
+comments before "// a"
+line before "// b"
+line suffix "// c"
+comments before "// d"
+comments before "// e"
+`,
+		}, {
+			desc: "block",
+			input: `
+// a
+
+// b
+block ( // c
+	// d
+
+	// e
+	x // f
+	// g
+
+	// h
+) // i
+// j
+
+// k
+`,
+			want: `
+comments before "// a"
+block before "// b"
+lparen suffix "// c"
+blockline before "// d"
+blockline before ""
+blockline before "// e"
+blockline suffix "// f"
+rparen before "// g"
+rparen before ""
+rparen before "// h"
+rparen suffix "// i"
+comments before "// j"
+comments before "// k"
+`,
+		}, {
+			desc:  "cr_removed",
+			input: "// a\r\r\n",
+			want:  `comments before "// a\r"`,
+		},
+	} {
+		t.Run(test.desc, func(t *testing.T) {
+			f, err := ParseLax("go.mod", []byte(test.input), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			buf := &bytes.Buffer{}
+			printComments := func(prefix string, cs *Comments) {
+				for _, c := range cs.Before {
+					fmt.Fprintf(buf, "%s before %q\n", prefix, c.Token)
+				}
+				for _, c := range cs.Suffix {
+					fmt.Fprintf(buf, "%s suffix %q\n", prefix, c.Token)
+				}
+				for _, c := range cs.After {
+					fmt.Fprintf(buf, "%s after %q\n", prefix, c.Token)
+				}
+			}
+
+			printComments("file", &f.Syntax.Comments)
+			for _, stmt := range f.Syntax.Stmt {
+				switch stmt := stmt.(type) {
+				case *CommentBlock:
+					printComments("comments", stmt.Comment())
+				case *Line:
+					printComments("line", stmt.Comment())
+				case *LineBlock:
+					printComments("block", stmt.Comment())
+					printComments("lparen", stmt.LParen.Comment())
+					for _, line := range stmt.Line {
+						printComments("blockline", line.Comment())
+					}
+					printComments("rparen", stmt.RParen.Comment())
+				}
+			}
+
+			got := strings.TrimSpace(buf.String())
+			want := strings.TrimSpace(test.want)
+			if got != want {
+				t.Errorf("got:\n%s\nwant:\n%s", got, want)
+			}
+		})
+	}
+}
