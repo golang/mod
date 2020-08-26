@@ -104,7 +104,7 @@ var checkPathTests = []struct {
 	{"x.y(/z", false, false, true},
 	{"x.y)/z", false, false, true},
 	{"x.y*/z", false, false, false},
-	{"x.y+/z", false, true, true},
+	{"x.y+/z", false, false, true},
 	{"x.y,/z", false, false, true},
 	{"x.y-/z", true, true, true},
 	{"x.y./zt", false, false, false},
@@ -134,7 +134,7 @@ var checkPathTests = []struct {
 	{"x.y/z(", false, false, true},
 	{"x.y/z)", false, false, true},
 	{"x.y/z*", false, false, false},
-	{"x.y/z+", true, true, true},
+	{"x.y/z+", false, false, true},
 	{"x.y/z,", false, false, true},
 	{"x.y/z-", true, true, true},
 	{"x.y/z.t", true, true, true},
@@ -241,7 +241,7 @@ var escapeTests = []struct {
 	path string
 	esc  string // empty means same as path
 }{
-	{path: "ascii.com/abcdefghijklmnopqrstuvwxyz.-+/~_0123456789"},
+	{path: "ascii.com/abcdefghijklmnopqrstuvwxyz.-/~_0123456789"},
 	{path: "github.com/GoogleCloudPlatform/omega", esc: "github.com/!google!cloud!platform/omega"},
 }
 
