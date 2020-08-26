@@ -163,6 +163,13 @@ var checkPathTests = []struct {
 	{"x.y/com1", false, false, false},
 	{"x.y/com1.txt", false, false, false},
 	{"x.y/calm1", true, true, true},
+	{"x.y/z~", true, true, true},
+	{"x.y/z~0", false, false, true},
+	{"x.y/z~09", false, false, true},
+	{"x.y/z09", true, true, true},
+	{"x.y/z09~", true, true, true},
+	{"x.y/z09~09z", true, true, true},
+	{"x.y/z09~09z~09", false, false, true},
 	{"github.com/!123/logrus", false, false, true},
 
 	// TODO: CL 41822 allowed Unicode letters in old "go get"

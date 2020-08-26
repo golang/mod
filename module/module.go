@@ -318,7 +318,9 @@ func CheckPath(path string) error {
 // It must not begin or end with a dot (U+002E), nor contain two dots in a row.
 //
 // The element prefix up to the first dot must not be a reserved file name
-// on Windows, regardless of case (CON, com1, NuL, and so on).
+// on Windows, regardless of case (CON, com1, NuL, and so on). The element
+// must not have a suffix of a tilde followed by one or more ASCII digits
+// (to exclude paths elements that look like Windows short-names).
 //
 // CheckImportPath may be less restrictive in the future, but see the
 // top-level package documentation for additional information about
@@ -403,6 +405,29 @@ func checkElem(elem string, fileName bool) error {
 			return fmt.Errorf("%q disallowed as path element component on Windows", short)
 		}
 	}
+
+	if fileName {
+		// don't check for Windows short-names in file names. They're
+		// only an issue for import paths.
+		return nil
+	}
+
+	// Reject path components that look like Windows short-names.
+	// Those usually end in a tilde followed by one or more ASCII digits.
+	if tilde := strings.LastIndexByte(short, '~'); tilde >= 0 && tilde < len(short)-1 {
+		suffix := short[tilde+1:]
+		suffixIsDigits := true
+		for _, r := range suffix {
+			if r < '0' || r > '9' {
+				suffixIsDigits = false
+				break
+			}
+		}
+		if suffixIsDigits {
+			return fmt.Errorf("trailing tilde and digits in path element")
+		}
+	}
+
 	return nil
 }
 
