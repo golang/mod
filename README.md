@@ -1,3 +1,7 @@
+# mod
+
+[![PkgGoDev](https://pkg.go.dev/badge/golang.org/x/mod)](https://pkg.go.dev/golang.org/x/mod)
+
 This repository holds packages for writing tools
 that work directly with Go module mechanics.
 That is, it is for direct manipulation of Go modules themselves.
@@ -10,4 +14,3 @@ should remain in x/tools, specifically x/tools/go/packages.
 The specific case of loading packages should still be done by
 invoking the go command, which remains the single point of
 truth for package loading algorithms.
-
