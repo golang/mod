@@ -568,6 +568,48 @@ var sortBlocksTests = []struct {
 	},
 }
 
+var addRetractValidateVersionTests = []struct {
+	dsc, low, high string
+}{
+	{
+		"blank_version",
+		"",
+		"",
+	},
+	{
+		"missing_prefix",
+		"1.0.0",
+		"1.0.0",
+	},
+	{
+		"non_canonical",
+		"v1.2",
+		"v1.2",
+	},
+	{
+		"invalid_range",
+		"v1.2.3",
+		"v1.3",
+	},
+}
+
+var addExcludeValidateVersionTests = []struct {
+	dsc, ver string
+}{
+	{
+		"blank_version",
+		"",
+	},
+	{
+		"missing_prefix",
+		"1.0.0",
+	},
+	{
+		"non_canonical",
+		"v1.2",
+	},
+}
+
 func TestAddRequire(t *testing.T) {
 	for _, tt := range addRequireTests {
 		t.Run(tt.desc, func(t *testing.T) {
@@ -698,4 +740,32 @@ func testEdit(t *testing.T, in, want string, strict bool, transform func(f *File
 	}
 
 	return f
+}
+
+func TestAddRetractValidateVersion(t *testing.T) {
+	for _, tt := range addRetractValidateVersionTests {
+		t.Run(tt.dsc, func(t *testing.T) {
+			f, err := Parse("in", []byte("module m"), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = f.AddRetract(VersionInterval{Low: tt.low, High: tt.high}, ""); err == nil {
+				t.Fatal("expected AddRetract to complain about version format")
+			}
+		})
+	}
+}
+
+func TestAddExcludeValidateVersion(t *testing.T) {
+	for _, tt := range addExcludeValidateVersionTests {
+		t.Run(tt.dsc, func(t *testing.T) {
+			f, err := Parse("in", []byte("module m"), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = f.AddExclude("aa", tt.ver); err == nil {
+				t.Fatal("expected AddExclude to complain about version format")
+			}
+		})
+	}
 }
