@@ -6,6 +6,7 @@ package modfile
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	"golang.org/x/mod/module"
@@ -185,6 +186,45 @@ var addGoTests = []struct {
 		`1.14`,
 		`require x.y/a v1.2.3
 		go 1.14
+		`,
+	},
+}
+
+var addExcludeTests = []struct {
+	desc    string
+	in      string
+	path    string
+	version string
+	out     string
+}{
+	{
+		`compatible`,
+		`module m
+		`,
+		`example.com`,
+		`v1.2.3`,
+		`module m
+		exclude example.com v1.2.3
+		`,
+	},
+	{
+		`gopkg.in v0`,
+		`module m
+		`,
+		`gopkg.in/foo.v0`,
+		`v0.2.3`,
+		`module m
+		exclude gopkg.in/foo.v0 v0.2.3
+		`,
+	},
+	{
+		`gopkg.in v1`,
+		`module m
+		`,
+		`gopkg.in/foo.v1`,
+		`v1.2.3`,
+		`module m
+		exclude gopkg.in/foo.v1 v1.2.3
 		`,
 	},
 }
@@ -569,44 +609,90 @@ var sortBlocksTests = []struct {
 }
 
 var addRetractValidateVersionTests = []struct {
-	dsc, low, high string
+	desc      string
+	path      string
+	low, high string
+	wantErr   string
 }{
 	{
-		"blank_version",
-		"",
-		"",
+		`blank_version`,
+		`example.com/m`,
+		``,
+		``,
+		`version "" invalid: must be of the form v1.2.3`,
 	},
 	{
-		"missing_prefix",
-		"1.0.0",
-		"1.0.0",
+		`missing prefix`,
+		`example.com/m`,
+		`1.0.0`,
+		`1.0.0`,
+		`version "1.0.0" invalid: must be of the form v1.2.3`,
 	},
 	{
-		"non_canonical",
-		"v1.2",
-		"v1.2",
+		`non-canonical`,
+		`example.com/m`,
+		`v1.2`,
+		`v1.2`,
+		`version "v1.2" invalid: must be of the form v1.2.3`,
 	},
 	{
-		"invalid_range",
-		"v1.2.3",
-		"v1.3",
+		`invalid range`,
+		`example.com/m`,
+		`v1.2.3`,
+		`v1.3`,
+		`version "v1.3" invalid: must be of the form v1.2.3`,
+	},
+	{
+		`mismatched major`,
+		`example.com/m/v2`,
+		`v1.0.0`,
+		`v1.0.0`,
+		`version "v1.0.0" invalid: should be v2, not v1`,
+	},
+	{
+		`missing +incompatible`,
+		`example.com/m`,
+		`v2.0.0`,
+		`v2.0.0`,
+		`version "v2.0.0" invalid: should be v2.0.0+incompatible (or module example.com/m/v2)`,
 	},
 }
 
 var addExcludeValidateVersionTests = []struct {
-	dsc, ver string
+	desc    string
+	path    string
+	version string
+	wantErr string
 }{
 	{
-		"blank_version",
-		"",
+		`blank version`,
+		`example.com/m`,
+		``,
+		`version "" invalid: must be of the form v1.2.3`,
 	},
 	{
-		"missing_prefix",
-		"1.0.0",
+		`missing prefix`,
+		`example.com/m`,
+		`1.0.0`,
+		`version "1.0.0" invalid: must be of the form v1.2.3`,
 	},
 	{
-		"non_canonical",
-		"v1.2",
+		`non-canonical`,
+		`example.com/m`,
+		`v1.2`,
+		`version "v1.2" invalid: must be of the form v1.2.3`,
+	},
+	{
+		`mismatched major`,
+		`example.com/m/v2`,
+		`v1.2.3`,
+		`version "v1.2.3" invalid: should be v2, not v1`,
+	},
+	{
+		`missing +incompatible`,
+		`example.com/m`,
+		`v2.3.4`,
+		`version "v2.3.4" invalid: should be v2.3.4+incompatible (or module example.com/m/v2)`,
 	},
 }
 
@@ -652,6 +738,16 @@ func TestAddGo(t *testing.T) {
 		t.Run(tt.desc, func(t *testing.T) {
 			testEdit(t, tt.in, tt.out, true, func(f *File) error {
 				return f.AddGoStmt(tt.version)
+			})
+		})
+	}
+}
+
+func TestAddExclude(t *testing.T) {
+	for _, tt := range addExcludeTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			testEdit(t, tt.in, tt.out, true, func(f *File) error {
+				return f.AddExclude(tt.path, tt.version)
 			})
 		})
 	}
@@ -744,13 +840,21 @@ func testEdit(t *testing.T, in, want string, strict bool, transform func(f *File
 
 func TestAddRetractValidateVersion(t *testing.T) {
 	for _, tt := range addRetractValidateVersionTests {
-		t.Run(tt.dsc, func(t *testing.T) {
-			f, err := Parse("in", []byte("module m"), nil)
-			if err != nil {
-				t.Fatal(err)
+		t.Run(tt.desc, func(t *testing.T) {
+			f := new(File)
+			if tt.path != "" {
+				if err := f.AddModuleStmt(tt.path); err != nil {
+					t.Fatal(err)
+				}
+				t.Logf("module %s", AutoQuote(tt.path))
 			}
-			if err = f.AddRetract(VersionInterval{Low: tt.low, High: tt.high}, ""); err == nil {
-				t.Fatal("expected AddRetract to complain about version format")
+			interval := VersionInterval{Low: tt.low, High: tt.high}
+			if err := f.AddRetract(interval, ``); err == nil || err.Error() != tt.wantErr {
+				errStr := "<nil>"
+				if err != nil {
+					errStr = fmt.Sprintf("%#q", err)
+				}
+				t.Fatalf("f.AddRetract(%+v, ``) = %s\nwant %#q", interval, errStr, tt.wantErr)
 			}
 		})
 	}
@@ -758,13 +862,17 @@ func TestAddRetractValidateVersion(t *testing.T) {
 
 func TestAddExcludeValidateVersion(t *testing.T) {
 	for _, tt := range addExcludeValidateVersionTests {
-		t.Run(tt.dsc, func(t *testing.T) {
+		t.Run(tt.desc, func(t *testing.T) {
 			f, err := Parse("in", []byte("module m"), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err = f.AddExclude("aa", tt.ver); err == nil {
-				t.Fatal("expected AddExclude to complain about version format")
+			if err = f.AddExclude(tt.path, tt.version); err == nil || err.Error() != tt.wantErr {
+				errStr := "<nil>"
+				if err != nil {
+					errStr = fmt.Sprintf("%#q", err)
+				}
+				t.Fatalf("f.AddExclude(%q, %q) = %s\nwant %#q", tt.path, tt.version, errStr, tt.wantErr)
 			}
 		})
 	}
