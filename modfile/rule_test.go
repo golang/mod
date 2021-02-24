@@ -7,6 +7,7 @@ package modfile
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"testing"
 
 	"golang.org/x/mod/module"
@@ -696,6 +697,59 @@ var addExcludeValidateVersionTests = []struct {
 	},
 }
 
+var fixVersionTests = []struct {
+	desc, in, want, wantErr string
+	fix                     VersionFixer
+}{
+	{
+		desc: `require`,
+		in:   `require example.com/m 1.0.0`,
+		want: `require example.com/m v1.0.0`,
+		fix:  fixV,
+	},
+	{
+		desc: `replace`,
+		in:   `replace example.com/m 1.0.0 => example.com/m 1.1.0`,
+		want: `replace example.com/m v1.0.0 => example.com/m v1.1.0`,
+		fix:  fixV,
+	},
+	{
+		desc: `exclude`,
+		in:   `exclude example.com/m 1.0.0`,
+		want: `exclude example.com/m v1.0.0`,
+		fix:  fixV,
+	},
+	{
+		desc: `retract_single`,
+		in: `module example.com/m
+		retract 1.0.0`,
+		want: `module example.com/m
+		retract v1.0.0`,
+		fix: fixV,
+	},
+	{
+		desc: `retract_interval`,
+		in: `module example.com/m
+		retract [1.0.0, 1.1.0]`,
+		want: `module example.com/m
+		retract [v1.0.0, v1.1.0]`,
+		fix: fixV,
+	},
+	{
+		desc:    `retract_nomod`,
+		in:      `retract 1.0.0`,
+		wantErr: `in:1: no module directive found, so retract cannot be used`,
+		fix:     fixV,
+	},
+}
+
+func fixV(path, version string) (string, error) {
+	if path != "example.com/m" {
+		return "", fmt.Errorf("module path must be example.com/m")
+	}
+	return "v" + version, nil
+}
+
 func TestAddRequire(t *testing.T) {
 	for _, tt := range addRequireTests {
 		t.Run(tt.desc, func(t *testing.T) {
@@ -873,6 +927,40 @@ func TestAddExcludeValidateVersion(t *testing.T) {
 					errStr = fmt.Sprintf("%#q", err)
 				}
 				t.Fatalf("f.AddExclude(%q, %q) = %s\nwant %#q", tt.path, tt.version, errStr, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestFixVersion(t *testing.T) {
+	for _, tt := range fixVersionTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			inFile, err := Parse("in", []byte(tt.in), tt.fix)
+			if err != nil {
+				if tt.wantErr == "" {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if errMsg := err.Error(); !strings.Contains(errMsg, tt.wantErr) {
+					t.Fatalf("got error %q; want error containing %q", errMsg, tt.wantErr)
+				}
+				return
+			}
+			got, err := inFile.Format()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			outFile, err := Parse("out", []byte(tt.want), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := outFile.Format()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if !bytes.Equal(got, want) {
+				t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 			}
 		})
 	}
