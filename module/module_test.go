@@ -78,7 +78,7 @@ var checkPathTests = []struct {
 	{"x.y/\xFFz", false, false, false},
 	{"/x.y/z", false, false, false},
 	{"x./z", false, false, false},
-	{".x/z", false, false, true},
+	{".x/z", false, true, true},
 	{"-x/z", false, false, false},
 	{"x..y/z", true, true, true},
 	{"x.y/z/../../w", false, false, false},
@@ -184,8 +184,8 @@ var checkPathTests = []struct {
 	{"./y", false, false, false},
 	{"x:y", false, false, false},
 	{`\temp\foo`, false, false, false},
-	{".gitignore", false, false, true},
-	{".github/ISSUE_TEMPLATE", false, false, true},
+	{".gitignore", false, true, true},
+	{".github/ISSUE_TEMPLATE", false, true, true},
 	{"x☺y", false, false, false},
 }
 
