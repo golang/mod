@@ -499,6 +499,118 @@ suffix`,
 	},
 }
 
+var moduleDeprecatedTests = []struct {
+	desc, in, want string
+}{
+	// retractRationaleTests exercises some of the same code, so these tests
+	// don't exhaustively cover comment extraction.
+	{
+		`no_comment`,
+		`module m`,
+		``,
+	},
+	{
+		`other_comment`,
+		`// yo
+		module m`,
+		``,
+	},
+	{
+		`deprecated_no_colon`,
+		`//Deprecated
+		module m`,
+		``,
+	},
+	{
+		`deprecated_no_space`,
+		`//Deprecated:blah
+		module m`,
+		`blah`,
+	},
+	{
+		`deprecated_simple`,
+		`// Deprecated: blah
+		module m`,
+		`blah`,
+	},
+	{
+		`deprecated_lowercase`,
+		`// deprecated: blah
+		module m`,
+		``,
+	},
+	{
+		`deprecated_multiline`,
+		`// Deprecated: one
+		// two
+		module m`,
+		"one\ntwo",
+	},
+	{
+		`deprecated_mixed`,
+		`// some other comment
+		// Deprecated: blah
+		module m`,
+		``,
+	},
+	{
+		`deprecated_middle`,
+		`// module m is Deprecated: blah
+		module m`,
+		``,
+	},
+	{
+		`deprecated_multiple`,
+		`// Deprecated: a
+		// Deprecated: b
+		module m`,
+		"a\nDeprecated: b",
+	},
+	{
+		`deprecated_paragraph`,
+		`// Deprecated: a
+		// b
+		//
+		// c
+		module m`,
+		"a\nb",
+	},
+	{
+		`deprecated_paragraph_space`,
+		`// Deprecated: the next line has a space
+		// 
+		// c
+		module m`,
+		"the next line has a space",
+	},
+	{
+		`deprecated_suffix`,
+		`module m // Deprecated: blah`,
+		`blah`,
+	},
+	{
+		`deprecated_mixed_suffix`,
+		`// some other comment
+		module m // Deprecated: blah`,
+		``,
+	},
+	{
+		`deprecated_mixed_suffix_paragraph`,
+		`// some other comment
+		//
+		module m // Deprecated: blah`,
+		`blah`,
+	},
+	{
+		`deprecated_block`,
+		`// Deprecated: blah
+		module (
+			m
+		)`,
+		`blah`,
+	},
+}
+
 var sortBlocksTests = []struct {
 	desc, in, out string
 	strict        bool
@@ -843,6 +955,20 @@ func TestRetractRationale(t *testing.T) {
 			}
 			if got := f.Retract[0].Rationale; got != tt.want {
 				t.Errorf("got %q; want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestModuleDeprecated(t *testing.T) {
+	for _, tt := range moduleDeprecatedTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			f, err := Parse("in", []byte(tt.in), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if f.Module.Deprecated != tt.want {
+				t.Errorf("got %q; want %q", f.Module.Deprecated, tt.want)
 			}
 		})
 	}
