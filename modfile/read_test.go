@@ -603,3 +603,134 @@ comments before "// k"
 		})
 	}
 }
+
+func TestCleanup(t *testing.T) {
+	for _, test := range []struct {
+		desc  string
+		want  string
+		input []Expr
+	}{
+		{
+			desc: "simple_lines",
+			want: `line: module a
+line: require b v1.0.0
+`,
+			input: []Expr{
+				&Line{
+					Token: []string{"module", "a"},
+				},
+				&Line{
+					Token: []string{"require", "b", "v1.0.0"},
+				},
+				&Line{
+					Token: nil,
+				},
+			},
+		}, {
+			desc: "line_block",
+			want: `line: module a
+block: require
+blockline: b v1.0.0
+blockline: c v1.0.0
+`,
+			input: []Expr{
+				&Line{
+					Token: []string{"module", "a"},
+				},
+				&LineBlock{
+					Token: []string{"require"},
+					Line: []*Line{
+						{
+							Token:   []string{"b", "v1.0.0"},
+							InBlock: true,
+						},
+						{
+							Token:   nil,
+							InBlock: true,
+						},
+						{
+							Token:   []string{"c", "v1.0.0"},
+							InBlock: true,
+						},
+					},
+				},
+			},
+		}, {
+			desc: "collapse",
+			want: `line: module a
+line: require b v1.0.0
+`,
+			input: []Expr{
+				&Line{
+					Token: []string{"module", "a"},
+				},
+				&LineBlock{
+					Token: []string{"require"},
+					Line: []*Line{
+						{
+							Token:   []string{"b", "v1.0.0"},
+							InBlock: true,
+						},
+						{
+							Token:   nil,
+							InBlock: true,
+						},
+					},
+				},
+			},
+		},
+	} {
+		t.Run(test.desc, func(t *testing.T) {
+			syntax := &FileSyntax{
+				Stmt: test.input,
+			}
+			syntax.Cleanup()
+
+			buf := &bytes.Buffer{}
+			for _, stmt := range syntax.Stmt {
+				switch stmt := stmt.(type) {
+				case *Line:
+					fmt.Fprintf(buf, "line: %v\n", strings.Join(stmt.Token, " "))
+				case *LineBlock:
+					fmt.Fprintf(buf, "block: %v\n", strings.Join(stmt.Token, " "))
+					for _, line := range stmt.Line {
+						fmt.Fprintf(buf, "blockline: %v\n", strings.Join(line.Token, " "))
+					}
+				}
+			}
+
+			got := strings.TrimSpace(buf.String())
+			want := strings.TrimSpace(test.want)
+			if got != want {
+				t.Errorf("got:\n%s\nwant:\n%s", got, want)
+			}
+		})
+	}
+}
+
+// Issue 45130: File.Cleanup breaks references so future edits do nothing
+func TestCleanupMaintainsRefs(t *testing.T) {
+	lineB := &Line{
+		Token:   []string{"b", "v1.0.0"},
+		InBlock: true,
+	}
+	syntax := &FileSyntax{
+		Stmt: []Expr{
+			&LineBlock{
+				Token: []string{"require"},
+				Line: []*Line{
+					lineB,
+					{
+						Token:   nil,
+						InBlock: true,
+					},
+				},
+			},
+		},
+	}
+	syntax.Cleanup()
+
+	if syntax.Stmt[0] != lineB {
+		t.Errorf("got:\n%v\nwant:\n%v", syntax.Stmt[0], lineB)
+	}
+}
