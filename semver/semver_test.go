@@ -5,6 +5,8 @@
 package semver
 
 import (
+	"math/rand"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -151,6 +153,18 @@ func TestCompare(t *testing.T) {
 				t.Errorf("Compare(%q, %q) = %d, want %d", ti.in, tj.in, cmp, want)
 			}
 		}
+	}
+}
+
+func TestSort(t *testing.T) {
+	versions := make([]string, len(tests))
+	for i, test := range tests {
+		versions[i] = test.in
+	}
+	rand.Shuffle(len(versions), func(i, j int) { versions[i], versions[j] = versions[j], versions[i] })
+	Sort(versions)
+	if !sort.IsSorted(ByVersion(versions)) {
+		t.Errorf("list is not sorted:\n%s", strings.Join(versions, "\n"))
 	}
 }
 
