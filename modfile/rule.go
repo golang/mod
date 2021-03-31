@@ -131,8 +131,15 @@ var dontFixRetract VersionFixer = func(_, vers string) (string, error) {
 	return vers, nil
 }
 
-// Parse parses the data, reported in errors as being from file,
-// into a File struct. It applies fix, if non-nil, to canonicalize all module versions found.
+// Parse parses and returns a go.mod file.
+//
+// file is the name of the file, used in positions and errors.
+//
+// data is the content of the file.
+//
+// fix is an optional function that canonicalizes module versions.
+// If fix is nil, all module versions must be canonical (module.CanonicalVersion
+// must return the same string).
 func Parse(file string, data []byte, fix VersionFixer) (*File, error) {
 	return parseToFile(file, data, fix, true)
 }
