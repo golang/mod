@@ -505,8 +505,8 @@ func setIndirect(line *Line, indirect bool) {
 	}
 
 	// Removing comment.
-	f := strings.Fields(line.Suffix[0].Token)
-	if len(f) == 2 {
+	f := strings.TrimSpace(strings.ReplaceAll(line.Suffix[0].Token, " ", ""))
+	if f == "//indirect" {
 		// Remove whole comment.
 		line.Suffix = nil
 		return
