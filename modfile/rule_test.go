@@ -77,6 +77,32 @@ var setRequireTests = []struct {
 	out string
 }{
 	{
+		`https://golang.org/issue/45932`,
+		`module m
+		require (
+			x.y/a v1.2.3 //indirect
+			x.y/b v1.2.3
+			x.y/c v1.2.3
+		)
+		`,
+		[]struct {
+			path     string
+			vers     string
+			indirect bool
+		}{
+			{"x.y/a", "v1.2.3", false},
+			{"x.y/b", "v1.2.3", false},
+			{"x.y/c", "v1.2.3", false},
+		},
+		`module m
+		require (
+			x.y/a v1.2.3
+			x.y/b v1.2.3
+			x.y/c v1.2.3
+		)
+		`,
+	},
+	{
 		`existing`,
 		`module m
 		require (
