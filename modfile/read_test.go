@@ -424,9 +424,10 @@ func TestModulePath(t *testing.T) {
 }
 
 func TestGoVersion(t *testing.T) {
-	for _, test := range []struct {
+	tests := []struct {
 		desc, input string
 		ok          bool
+		laxOK       bool // ok=true implies laxOK=true; only set if ok=false
 	}{
 		{desc: "empty", input: "module m\ngo \n", ok: false},
 		{desc: "one", input: "module m\ngo 1\n", ok: false},
@@ -435,15 +436,38 @@ func TestGoVersion(t *testing.T) {
 		{desc: "before", input: "module m\ngo v1.2\n", ok: false},
 		{desc: "after", input: "module m\ngo 1.2rc1\n", ok: false},
 		{desc: "space", input: "module m\ngo 1.2 3.4\n", ok: false},
-	} {
-		t.Run(test.desc, func(t *testing.T) {
-			if _, err := Parse("go.mod", []byte(test.input), nil); err == nil && !test.ok {
-				t.Error("unexpected success")
-			} else if err != nil && test.ok {
-				t.Errorf("unexpected error: %v", err)
-			}
-		})
+		{desc: "alt1", input: "module m\ngo 1.2.3\n", ok: false, laxOK: true},
+		{desc: "alt2", input: "module m\ngo 1.2rc1\n", ok: false, laxOK: true},
+		{desc: "alt3", input: "module m\ngo 1.2beta1\n", ok: false, laxOK: true},
+		{desc: "alt4", input: "module m\ngo 1.2.beta1\n", ok: false, laxOK: true},
+		{desc: "alt1", input: "module m\ngo v1.2.3\n", ok: false, laxOK: true},
+		{desc: "alt2", input: "module m\ngo v1.2rc1\n", ok: false, laxOK: true},
+		{desc: "alt3", input: "module m\ngo v1.2beta1\n", ok: false, laxOK: true},
+		{desc: "alt4", input: "module m\ngo v1.2.beta1\n", ok: false, laxOK: true},
+		{desc: "alt1", input: "module m\ngo v1.2\n", ok: false, laxOK: true},
 	}
+	t.Run("Strict", func(t *testing.T) {
+		for _, test := range tests {
+			t.Run(test.desc, func(t *testing.T) {
+				if _, err := Parse("go.mod", []byte(test.input), nil); err == nil && !test.ok {
+					t.Error("unexpected success")
+				} else if err != nil && test.ok {
+					t.Errorf("unexpected error: %v", err)
+				}
+			})
+		}
+	})
+	t.Run("Lax", func(t *testing.T) {
+		for _, test := range tests {
+			t.Run(test.desc, func(t *testing.T) {
+				if _, err := Parse("go.mod", []byte(test.input), nil); err == nil && !(test.ok || test.laxOK) {
+					t.Error("unexpected success")
+				} else if err != nil && test.ok {
+					t.Errorf("unexpected error: %v", err)
+				}
+			})
+		}
+	})
 }
 
 func TestComments(t *testing.T) {
