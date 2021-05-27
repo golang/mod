@@ -835,6 +835,12 @@ func (f *File) AddGoStmt(version string) error {
 	return nil
 }
 
+// AddRequire sets the first require line for path to version vers,
+// preserving any existing comments for that line and removing all
+// other lines for path.
+//
+// If no line currently exists for path, AddRequire adds a new line
+// at the end of the last require block.
 func (f *File) AddRequire(path, vers string) error {
 	need := true
 	for _, r := range f.Require {
@@ -856,12 +862,17 @@ func (f *File) AddRequire(path, vers string) error {
 	return nil
 }
 
+// AddNewRequire adds a new require line for path at version vers at the end of
+// the last require block, regardless of any existing require lines for path.
 func (f *File) AddNewRequire(path, vers string, indirect bool) {
 	line := f.Syntax.addLine(nil, "require", AutoQuote(path), vers)
 	setIndirect(line, indirect)
 	f.Require = append(f.Require, &Require{module.Version{Path: path, Version: vers}, indirect, line})
 }
 
+// SetRequire sets the requirements of f to contain exactly req, preserving
+// any existing line comments contents (except for 'indirect' markings)
+// for the module versions named in req.
 func (f *File) SetRequire(req []*Require) {
 	need := make(map[string]string)
 	indirect := make(map[string]bool)
