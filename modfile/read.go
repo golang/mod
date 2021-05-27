@@ -196,6 +196,7 @@ func (x *FileSyntax) updateLine(line *Line, tokens ...string) {
 
 func (x *FileSyntax) removeLine(line *Line) {
 	line.Token = nil
+	line.Comments.Suffix = nil
 }
 
 // Cleanup cleans up the file syntax x after any edit operations.

@@ -33,6 +33,32 @@ var addRequireTests = []struct {
 		`,
 	},
 	{
+		`existing2`,
+		`
+		module m
+		require (
+			x.y/z v1.2.3 // first
+			x.z/a v0.1.0 // first-a
+		)
+		require x.y/z v1.4.5 // second
+		require (
+			x.y/z v1.6.7 // third
+			x.z/a v0.2.0 // third-a
+		)
+		`,
+		"x.y/z", "v1.8.9",
+		`
+		module m
+
+		require (
+			x.y/z v1.8.9 // first
+			x.z/a v0.1.0 // first-a
+		)
+
+		require x.z/a v0.2.0 // third-a
+		`,
+	},
+	{
 		`new`,
 		`
 		module m
@@ -892,7 +918,9 @@ func TestAddRequire(t *testing.T) {
 	for _, tt := range addRequireTests {
 		t.Run(tt.desc, func(t *testing.T) {
 			testEdit(t, tt.in, tt.out, true, func(f *File) error {
-				return f.AddRequire(tt.path, tt.vers)
+				err := f.AddRequire(tt.path, tt.vers)
+				f.Cleanup()
+				return err
 			})
 		})
 	}
