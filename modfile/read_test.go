@@ -152,6 +152,9 @@ func TestPrintParse(t *testing.T) {
 	for _, out := range outs {
 		out := out
 		name := filepath.Base(out)
+		if !strings.HasSuffix(out, ".in") && !strings.HasSuffix(out, ".golden") {
+			continue
+		}
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			data, err := ioutil.ReadFile(out)

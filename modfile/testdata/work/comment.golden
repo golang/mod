@@ -1,0 +1,10 @@
+// comment
+directory x // eol
+
+// mid comment
+
+// comment 2
+// comment 2 line 2
+directory y // eoy
+
+// comment 3
