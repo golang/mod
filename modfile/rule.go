@@ -58,13 +58,6 @@ type Go struct {
 	Syntax  *Line
 }
 
-// A Require is a single require statement.
-type Require struct {
-	Mod      module.Version
-	Indirect bool // has "// indirect" comment
-	Syntax   *Line
-}
-
 // An Exclude is a single exclude statement.
 type Exclude struct {
 	Mod    module.Version
@@ -91,6 +84,93 @@ type Retract struct {
 // ('[v1.2.3, v1.2.3]'); both have the same representation.
 type VersionInterval struct {
 	Low, High string
+}
+
+// A Require is a single require statement.
+type Require struct {
+	Mod      module.Version
+	Indirect bool // has "// indirect" comment
+	Syntax   *Line
+}
+
+func (r *Require) markRemoved() {
+	r.Syntax.markRemoved()
+	*r = Require{}
+}
+
+func (r *Require) setVersion(v string) {
+	r.Mod.Version = v
+
+	if line := r.Syntax; len(line.Token) > 0 {
+		if line.InBlock {
+			// If the line is preceded by an empty line, remove it; see
+			// https://golang.org/issue/33779.
+			if len(line.Comments.Before) == 1 && len(line.Comments.Before[0].Token) == 0 {
+				line.Comments.Before = line.Comments.Before[:0]
+			}
+			if len(line.Token) >= 2 { // example.com v1.2.3
+				line.Token[1] = v
+			}
+		} else {
+			if len(line.Token) >= 3 { // require example.com v1.2.3
+				line.Token[2] = v
+			}
+		}
+	}
+}
+
+// setIndirect sets line to have (or not have) a "// indirect" comment.
+func (r *Require) setIndirect(indirect bool) {
+	r.Indirect = indirect
+	line := r.Syntax
+	if isIndirect(line) == indirect {
+		return
+	}
+	if indirect {
+		// Adding comment.
+		if len(line.Suffix) == 0 {
+			// New comment.
+			line.Suffix = []Comment{{Token: "// indirect", Suffix: true}}
+			return
+		}
+
+		com := &line.Suffix[0]
+		text := strings.TrimSpace(strings.TrimPrefix(com.Token, string(slashSlash)))
+		if text == "" {
+			// Empty comment.
+			com.Token = "// indirect"
+			return
+		}
+
+		// Insert at beginning of existing comment.
+		com.Token = "// indirect; " + text
+		return
+	}
+
+	// Removing comment.
+	f := strings.TrimSpace(strings.TrimPrefix(line.Suffix[0].Token, string(slashSlash)))
+	if f == "indirect" {
+		// Remove whole comment.
+		line.Suffix = nil
+		return
+	}
+
+	// Remove comment prefix.
+	com := &line.Suffix[0]
+	i := strings.Index(com.Token, "indirect;")
+	com.Token = "//" + com.Token[i+len("indirect;"):]
+}
+
+// isIndirect reports whether line has a "// indirect" comment,
+// meaning it is in go.mod only for its effect on indirect dependencies,
+// so that it can be dropped entirely once the effective version of the
+// indirect dependency reaches the given minimum version.
+func isIndirect(line *Line) bool {
+	if len(line.Suffix) == 0 {
+		return false
+	}
+	f := strings.Fields(strings.TrimPrefix(line.Suffix[0].Token, string(slashSlash)))
+	return (len(f) == 1 && f[0] == "indirect" || len(f) > 1 && f[0] == "indirect;")
 }
 
 func (f *File) AddModuleStmt(path string) error {
@@ -476,58 +556,6 @@ func (f *File) fixRetract(fix VersionFixer, errs *ErrorList) {
 	}
 }
 
-// isIndirect reports whether line has a "// indirect" comment,
-// meaning it is in go.mod only for its effect on indirect dependencies,
-// so that it can be dropped entirely once the effective version of the
-// indirect dependency reaches the given minimum version.
-func isIndirect(line *Line) bool {
-	if len(line.Suffix) == 0 {
-		return false
-	}
-	f := strings.Fields(strings.TrimPrefix(line.Suffix[0].Token, string(slashSlash)))
-	return (len(f) == 1 && f[0] == "indirect" || len(f) > 1 && f[0] == "indirect;")
-}
-
-// setIndirect sets line to have (or not have) a "// indirect" comment.
-func setIndirect(line *Line, indirect bool) {
-	if isIndirect(line) == indirect {
-		return
-	}
-	if indirect {
-		// Adding comment.
-		if len(line.Suffix) == 0 {
-			// New comment.
-			line.Suffix = []Comment{{Token: "// indirect", Suffix: true}}
-			return
-		}
-
-		com := &line.Suffix[0]
-		text := strings.TrimSpace(strings.TrimPrefix(com.Token, string(slashSlash)))
-		if text == "" {
-			// Empty comment.
-			com.Token = "// indirect"
-			return
-		}
-
-		// Insert at beginning of existing comment.
-		com.Token = "// indirect; " + text
-		return
-	}
-
-	// Removing comment.
-	f := strings.TrimSpace(strings.TrimPrefix(line.Suffix[0].Token, string(slashSlash)))
-	if f == "indirect" {
-		// Remove whole comment.
-		line.Suffix = nil
-		return
-	}
-
-	// Remove comment prefix.
-	com := &line.Suffix[0]
-	i := strings.Index(com.Token, "indirect;")
-	com.Token = "//" + com.Token[i+len("indirect;"):]
-}
-
 // IsDirectoryPath reports whether the given path should be interpreted
 // as a directory path. Just like on the go command line, relative paths
 // and rooted paths are directory paths; the rest are module paths.
@@ -866,8 +894,12 @@ func (f *File) AddRequire(path, vers string) error {
 // the last require block, regardless of any existing require lines for path.
 func (f *File) AddNewRequire(path, vers string, indirect bool) {
 	line := f.Syntax.addLine(nil, "require", AutoQuote(path), vers)
-	setIndirect(line, indirect)
-	f.Require = append(f.Require, &Require{module.Version{Path: path, Version: vers}, indirect, line})
+	r := &Require{
+		Mod:    module.Version{Path: path, Version: vers},
+		Syntax: line,
+	}
+	r.setIndirect(indirect)
+	f.Require = append(f.Require, r)
 }
 
 // SetRequire updates the requirements of f to contain exactly req, preserving
@@ -885,49 +917,28 @@ func (f *File) AddNewRequire(path, vers string, indirect bool) {
 // If any existing requirements may be removed, the caller should call Cleanup
 // after all edits are complete.
 func (f *File) SetRequire(req []*Require) {
-	need := make(map[string]string)
-	indirect := make(map[string]bool)
+	type elem struct {
+		version  string
+		indirect bool
+	}
+	need := make(map[string]elem)
 	for _, r := range req {
-		if prev, dup := need[r.Mod.Path]; dup && prev != r.Mod.Version {
-			panic(fmt.Errorf("SetRequire called with conflicting versions for path %s (%s and %s)", r.Mod.Path, prev, r.Mod.Version))
+		if prev, dup := need[r.Mod.Path]; dup && prev.version != r.Mod.Version {
+			panic(fmt.Errorf("SetRequire called with conflicting versions for path %s (%s and %s)", r.Mod.Path, prev.version, r.Mod.Version))
 		}
-		need[r.Mod.Path] = r.Mod.Version
-		indirect[r.Mod.Path] = r.Indirect
+		need[r.Mod.Path] = elem{r.Mod.Version, r.Indirect}
 	}
 
 	// Update or delete the existing Require entries to preserve
 	// only the first for each module path in req.
 	for _, r := range f.Require {
-		v, ok := need[r.Mod.Path]
-		if !ok {
-			// This line is redundant or its path is no longer required at all.
-			// Mark the requirement for deletion in Cleanup.
-			r.Syntax.markRemoved()
-			*r = Require{}
+		e, ok := need[r.Mod.Path]
+		if ok {
+			r.setVersion(e.version)
+			r.setIndirect(e.indirect)
+		} else {
+			r.markRemoved()
 		}
-
-		r.Mod.Version = v
-		r.Indirect = indirect[r.Mod.Path]
-
-		if line := r.Syntax; line != nil && len(line.Token) > 0 {
-			if line.InBlock {
-				// If the line is preceded by an empty line, remove it; see
-				// https://golang.org/issue/33779.
-				if len(line.Comments.Before) == 1 && len(line.Comments.Before[0].Token) == 0 {
-					line.Comments.Before = line.Comments.Before[:0]
-				}
-				if len(line.Token) >= 2 { // example.com v1.2.3
-					line.Token[1] = v
-				}
-			} else {
-				if len(line.Token) >= 3 { // require example.com v1.2.3
-					line.Token[2] = v
-				}
-			}
-
-			setIndirect(line, r.Indirect)
-		}
-
 		delete(need, r.Mod.Path)
 	}
 
@@ -936,8 +947,8 @@ func (f *File) SetRequire(req []*Require) {
 	//
 	// This step is nondeterministic, but the final result will be deterministic
 	// because we will sort the block.
-	for path, vers := range need {
-		f.AddNewRequire(path, vers, indirect[path])
+	for path, e := range need {
+		f.AddNewRequire(path, e.version, e.indirect)
 	}
 
 	f.SortBlocks()
