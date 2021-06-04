@@ -954,6 +954,175 @@ func (f *File) SetRequire(req []*Require) {
 	f.SortBlocks()
 }
 
+// SetRequireSeparateIndirect updates the requirements of f to contain the given
+// requirements. Comment contents (except for 'indirect' markings) are retained
+// from the first existing requirement for each module path, and block structure
+// is maintained as long as the indirect markings match.
+//
+// Any requirements on paths not already present in the file are added. Direct
+// requirements are added to the last block containing *any* other direct
+// requirement. Indirect requirements are added to the last block containing
+// *only* other indirect requirements. If no suitable block exists, a new one is
+// added, with the last block containing a direct dependency (if any)
+// immediately before the first block containing only indirect dependencies.
+//
+// The Syntax field is ignored for requirements in the given blocks.
+func (f *File) SetRequireSeparateIndirect(req []*Require) {
+	type modKey struct {
+		path     string
+		indirect bool
+	}
+	need := make(map[modKey]string)
+	for _, r := range req {
+		need[modKey{r.Mod.Path, r.Indirect}] = r.Mod.Version
+	}
+
+	comments := make(map[string]Comments)
+	for _, r := range f.Require {
+		v, ok := need[modKey{r.Mod.Path, r.Indirect}]
+		if !ok {
+			if _, ok := need[modKey{r.Mod.Path, !r.Indirect}]; ok {
+				if _, dup := comments[r.Mod.Path]; !dup {
+					comments[r.Mod.Path] = r.Syntax.Comments
+				}
+			}
+			r.markRemoved()
+			continue
+		}
+		r.setVersion(v)
+		delete(need, modKey{r.Mod.Path, r.Indirect})
+	}
+
+	var (
+		lastDirectOrMixedBlock Expr
+		firstIndirectOnlyBlock Expr
+		lastIndirectOnlyBlock  Expr
+	)
+	for _, stmt := range f.Syntax.Stmt {
+		switch stmt := stmt.(type) {
+		case *Line:
+			if len(stmt.Token) == 0 || stmt.Token[0] != "require" {
+				continue
+			}
+			if isIndirect(stmt) {
+				lastIndirectOnlyBlock = stmt
+			} else {
+				lastDirectOrMixedBlock = stmt
+			}
+		case *LineBlock:
+			if len(stmt.Token) == 0 || stmt.Token[0] != "require" {
+				continue
+			}
+			indirectOnly := true
+			for _, line := range stmt.Line {
+				if len(line.Token) == 0 {
+					continue
+				}
+				if !isIndirect(line) {
+					indirectOnly = false
+					break
+				}
+			}
+			if indirectOnly {
+				lastIndirectOnlyBlock = stmt
+				if firstIndirectOnlyBlock == nil {
+					firstIndirectOnlyBlock = stmt
+				}
+			} else {
+				lastDirectOrMixedBlock = stmt
+			}
+		}
+	}
+
+	isOrContainsStmt := func(stmt Expr, target Expr) bool {
+		if stmt == target {
+			return true
+		}
+		if stmt, ok := stmt.(*LineBlock); ok {
+			if target, ok := target.(*Line); ok {
+				for _, line := range stmt.Line {
+					if line == target {
+						return true
+					}
+				}
+			}
+		}
+		return false
+	}
+
+	addRequire := func(path, vers string, indirect bool, comments Comments) {
+		var line *Line
+		if indirect {
+			if lastIndirectOnlyBlock != nil {
+				line = f.Syntax.addLine(lastIndirectOnlyBlock, "require", path, vers)
+			} else {
+				// Add a new require block after the last direct-only or mixed "require"
+				// block (if any).
+				//
+				// (f.Syntax.addLine would add the line to an existing "require" block if
+				// present, but here the existing "require" blocks are all direct-only, so
+				// we know we need to add a new block instead.)
+				line = &Line{Token: []string{"require", path, vers}}
+				lastIndirectOnlyBlock = line
+				firstIndirectOnlyBlock = line // only block implies first block
+				if lastDirectOrMixedBlock == nil {
+					f.Syntax.Stmt = append(f.Syntax.Stmt, line)
+				} else {
+					for i, stmt := range f.Syntax.Stmt {
+						if isOrContainsStmt(stmt, lastDirectOrMixedBlock) {
+							f.Syntax.Stmt = append(f.Syntax.Stmt, nil)     // increase size
+							copy(f.Syntax.Stmt[i+2:], f.Syntax.Stmt[i+1:]) // shuffle elements up
+							f.Syntax.Stmt[i+1] = line
+							break
+						}
+					}
+				}
+			}
+		} else {
+			if lastDirectOrMixedBlock != nil {
+				line = f.Syntax.addLine(lastDirectOrMixedBlock, "require", path, vers)
+			} else {
+				// Add a new require block before the first indirect block (if any).
+				//
+				// That way if the file initially contains only indirect lines,
+				// the direct lines still appear before it: we preserve existing
+				// structure, but only to the extent that that structure already
+				// reflects the direct/indirect split.
+				line = &Line{Token: []string{"require", path, vers}}
+				lastDirectOrMixedBlock = line
+				if firstIndirectOnlyBlock == nil {
+					f.Syntax.Stmt = append(f.Syntax.Stmt, line)
+				} else {
+					for i, stmt := range f.Syntax.Stmt {
+						if isOrContainsStmt(stmt, firstIndirectOnlyBlock) {
+							f.Syntax.Stmt = append(f.Syntax.Stmt, nil)   // increase size
+							copy(f.Syntax.Stmt[i+1:], f.Syntax.Stmt[i:]) // shuffle elements up
+							f.Syntax.Stmt[i] = line
+							break
+						}
+					}
+				}
+			}
+		}
+
+		line.Comments.Before = commentsAdd(line.Comments.Before, comments.Before)
+		line.Comments.Suffix = commentsAdd(line.Comments.Suffix, comments.Suffix)
+
+		r := &Require{
+			Mod:      module.Version{Path: path, Version: vers},
+			Indirect: indirect,
+			Syntax:   line,
+		}
+		r.setIndirect(indirect)
+		f.Require = append(f.Require, r)
+	}
+
+	for k, vers := range need {
+		addRequire(k.path, vers, k.indirect, comments[k.path])
+	}
+	f.SortBlocks()
+}
+
 func (f *File) DropRequire(path string) error {
 	for _, r := range f.Require {
 		if r.Mod.Path == path {

@@ -254,6 +254,302 @@ var setRequireTests = []struct {
 	},
 }
 
+var setRequireSeparateIndirectTests = []struct {
+	desc string
+	in   string
+	mods []require
+	out  string
+}{
+	{
+		`https://golang.org/issue/45932`,
+		`module m
+		require (
+			x.y/a v1.2.3 //indirect
+			x.y/b v1.2.3
+			x.y/c v1.2.3
+		)
+		`,
+		[]require{
+			{"x.y/a", "v1.2.3", false},
+			{"x.y/b", "v1.2.3", false},
+			{"x.y/c", "v1.2.3", false},
+		},
+		`module m
+		require (
+			x.y/a v1.2.3
+			x.y/b v1.2.3
+			x.y/c v1.2.3
+		)
+		`,
+	},
+	{
+		`existing`,
+		`module m
+		require (
+			x.y/b v1.2.3
+
+			x.y/a v1.2.3
+			x.y/d v1.2.3
+		)
+		`,
+		[]require{
+			{"x.y/a", "v1.2.3", false},
+			{"x.y/b", "v1.2.3", false},
+			{"x.y/c", "v1.2.3", false},
+		},
+		`module m
+		require (
+			x.y/a v1.2.3
+			x.y/b v1.2.3
+			x.y/c v1.2.3
+		)
+		`,
+	},
+	{
+		`existing_indirect`,
+		`module m
+		require (
+			x.y/a v1.2.3
+			x.y/b v1.2.3 //
+			x.y/c v1.2.3 //c
+			x.y/d v1.2.3 //   c
+			x.y/e v1.2.3 // indirect
+			x.y/f v1.2.3 //indirect
+			x.y/g v1.2.3 //	indirect
+		)
+		`,
+		[]require{
+			{"x.y/a", "v1.2.3", true},
+			{"x.y/b", "v1.2.3", true},
+			{"x.y/c", "v1.2.3", true},
+			{"x.y/d", "v1.2.3", true},
+			{"x.y/e", "v1.2.3", true},
+			{"x.y/f", "v1.2.3", true},
+			{"x.y/g", "v1.2.3", true},
+		},
+		`module m
+		require (
+			x.y/a v1.2.3 // indirect
+			x.y/b v1.2.3 // indirect
+			x.y/c v1.2.3 // indirect; c
+			x.y/d v1.2.3 // indirect; c
+			x.y/e v1.2.3 // indirect
+			x.y/f v1.2.3 //indirect
+			x.y/g v1.2.3 //	indirect
+		)
+		`,
+	},
+	{
+		`existing_multi`,
+		`module m
+		require x.y/a v1.2.3
+		require x.y/b v1.2.3 // demoted to indirect
+		require x.y/c v1.0.0 // not v1.2.3!
+		require x.y/d v1.2.3 // comment kept
+		require x.y/e v1.2.3 // comment kept
+		require x.y/f v1.2.3 // indirect; promoted to direct
+		// promoted to direct
+		require x.y/g v1.2.3 // indirect
+		require x.y/i v1.2.3 // indirect
+		require x.y/j v1.2.3 // indirect
+		`,
+		[]require{
+			{"x.y/h", "v1.2.3", false}, // out of alphabetical order
+			{"x.y/i", "v1.2.3", true},
+			{"x.y/j", "v1.2.3", true},
+			{"x.y/a", "v1.2.3", false},
+			{"x.y/b", "v1.2.3", true},
+			{"x.y/c", "v1.2.3", false},
+			{"x.y/d", "v1.2.3", false},
+			{"x.y/e", "v1.2.3", true},
+			{"x.y/f", "v1.2.3", false},
+			{"x.y/g", "v1.2.3", false},
+		},
+		`module m
+		require x.y/a v1.2.3
+
+		require x.y/c v1.2.3 // not v1.2.3!
+
+		require (
+			x.y/d v1.2.3 // comment kept
+			x.y/f v1.2.3 // promoted to direct
+			// promoted to direct
+			x.y/g v1.2.3
+			x.y/h v1.2.3
+		)
+
+		require x.y/i v1.2.3 // indirect
+
+		require (
+			x.y/b v1.2.3 // indirect; demoted to indirect
+			x.y/e v1.2.3 // indirect; comment kept
+			x.y/j v1.2.3 // indirect
+		)
+		`,
+	},
+	{
+		`existing_duplicate`,
+		`module m
+		require (
+			x.y/a v1.0.0 // zero
+			x.y/a v1.1.0 // one
+			x.y/a v1.2.3 // two
+		)
+		`,
+		[]require{
+			{"x.y/a", "v1.2.3", true},
+		},
+		`module m
+		require x.y/a v1.2.3 // indirect; zero
+		`,
+	},
+	{
+		`existing_duplicate_multi`,
+		`module m
+		require x.y/a v1.0.0 // zero
+		require x.y/a v1.1.0 // one
+		require x.y/a v1.2.3 // two
+		`,
+		[]require{
+			{"x.y/a", "v1.2.3", true},
+		},
+		`module m
+		require x.y/a v1.2.3 // indirect; zero
+		`,
+	},
+	{
+		`existing_duplicate_mix_indirect`,
+		`module m
+		require (
+			x.y/a v1.0.0 // zero
+			x.y/a v1.1.0 // indirect; one
+			x.y/a v1.2.3 // indirect; two
+		)
+		`,
+		[]require{
+			{"x.y/a", "v1.2.3", true},
+		},
+		`module m
+		require x.y/a v1.2.3 // indirect; one
+		`,
+	},
+	{
+		`existing_duplicate_mix_direct`,
+		`module m
+		require (
+			x.y/a v1.0.0 // indirect; zero
+			x.y/a v1.1.0 // one
+			x.y/a v1.2.3 // two
+		)
+		`,
+		[]require{
+			{"x.y/a", "v1.2.3", false},
+		},
+		`module m
+		require x.y/a v1.2.3 // one
+		`,
+	},
+	{
+		`add_indirect_after_last_direct`,
+		`module m
+		require (
+			x.y/a v1.0.0 // comment a preserved
+			x.y/d v1.0.0 // comment d preserved
+		)
+		require (
+			x.y/b v1.0.0 // comment b preserved
+			x.y/e v1.0.0 // comment e preserved
+		)
+		go 1.17
+		`,
+		[]require{
+			{"x.y/a", "v1.2.3", false},
+			{"x.y/b", "v1.2.3", false},
+			{"x.y/c", "v1.2.3", true},
+			{"x.y/d", "v1.2.3", false},
+			{"x.y/e", "v1.2.3", false},
+			{"x.y/f", "v1.2.3", true},
+		},
+		`module m
+		require (
+			x.y/a v1.2.3 // comment a preserved
+			x.y/d v1.2.3 // comment d preserved
+		)
+		require (
+			x.y/b v1.2.3 // comment b preserved
+			x.y/e v1.2.3 // comment e preserved
+		)
+		require (
+			x.y/c v1.2.3 // indirect
+			x.y/f v1.2.3 // indirect
+		)
+		go 1.17
+		`,
+	},
+	{
+		`add_direct_before_first_indirect`,
+		`module m
+		require (
+			x.y/b v1.0.0 // indirect; comment b preserved
+			x.y/e v1.0.0 // indirect; comment d preserved
+		)
+		require (
+			x.y/c v1.0.0 // indirect; comment c preserved
+			x.y/f v1.0.0 // indirect; comment e preserved
+		)
+		`,
+		[]require{
+			{"x.y/a", "v1.2.3", false},
+			{"x.y/b", "v1.2.3", true},
+			{"x.y/c", "v1.2.3", true},
+			{"x.y/d", "v1.2.3", false},
+			{"x.y/e", "v1.2.3", true},
+			{"x.y/f", "v1.2.3", true},
+		},
+		`module m
+		require (
+			x.y/a v1.2.3
+			x.y/d v1.2.3
+		)
+		require (
+			x.y/b v1.2.3 // indirect; comment b preserved
+			x.y/e v1.2.3 // indirect; comment d preserved
+		)
+		require (
+			x.y/c v1.2.3 // indirect; comment c preserved
+			x.y/f v1.2.3 // indirect; comment e preserved
+		)
+		`,
+	},
+	{
+		`add_indirect_after_mixed`,
+		`module m
+		require (
+			x.y/a v1.0.0
+			x.y/b v1.0.0 // indirect
+		)
+		`,
+		[]require{
+			{"x.y/a", "v1.2.3", false},
+			{"x.y/b", "v1.2.3", true},  // should remain in the existing mixed block
+			{"x.y/c", "v1.2.3", true},  // should be added in an indirect-only block
+			{"x.y/d", "v1.2.3", false}, // should appear in the existing mixed block
+			{"x.y/e", "v1.2.3", true},  // should be added in the same indirect-only block
+		},
+		`module m
+		require (
+			x.y/a v1.2.3
+			x.y/b v1.2.3 // indirect
+			x.y/d v1.2.3
+		)
+		require (
+			x.y/c v1.2.3 // indirect
+			x.y/e v1.2.3 // indirect
+		)
+		`,
+	},
+}
+
 var addGoTests = []struct {
 	desc    string
 	in      string
@@ -1001,6 +1297,33 @@ func TestSetRequire(t *testing.T) {
 
 			f := testEdit(t, tt.in, tt.out, true, func(f *File) error {
 				f.SetRequire(mods)
+				f.Cleanup()
+				return nil
+			})
+
+			if len(f.Require) != len(mods) {
+				t.Errorf("after Cleanup, len(Require) = %v; want %v", len(f.Require), len(mods))
+			}
+		})
+	}
+}
+
+func TestSetRequireSeparateIndirect(t *testing.T) {
+	for _, tt := range setRequireSeparateIndirectTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			var mods []*Require
+			for _, mod := range tt.mods {
+				mods = append(mods, &Require{
+					Mod: module.Version{
+						Path:    mod.path,
+						Version: mod.vers,
+					},
+					Indirect: mod.indirect,
+				})
+			}
+
+			f := testEdit(t, tt.in, tt.out, true, func(f *File) error {
+				f.SetRequireSeparateIndirect(mods)
 				f.Cleanup()
 				return nil
 			})
