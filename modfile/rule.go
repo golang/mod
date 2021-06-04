@@ -870,67 +870,76 @@ func (f *File) AddNewRequire(path, vers string, indirect bool) {
 	f.Require = append(f.Require, &Require{module.Version{Path: path, Version: vers}, indirect, line})
 }
 
-// SetRequire sets the requirements of f to contain exactly req, preserving
-// any existing line comments contents (except for 'indirect' markings)
-// for the module versions named in req.
+// SetRequire updates the requirements of f to contain exactly req, preserving
+// the existing block structure and line comment contents (except for 'indirect'
+// markings) for the first requirement on each named module path.
+//
+// The Syntax field is ignored for the requirements in req.
+//
+// Any requirements not already present in the file are added to the block
+// containing the last require line.
+//
+// The requirements in req must specify at most one distinct version for each
+// module path.
+//
+// If any existing requirements may be removed, the caller should call Cleanup
+// after all edits are complete.
 func (f *File) SetRequire(req []*Require) {
 	need := make(map[string]string)
 	indirect := make(map[string]bool)
 	for _, r := range req {
+		if prev, dup := need[r.Mod.Path]; dup && prev != r.Mod.Version {
+			panic(fmt.Errorf("SetRequire called with conflicting versions for path %s (%s and %s)", r.Mod.Path, prev, r.Mod.Version))
+		}
 		need[r.Mod.Path] = r.Mod.Version
 		indirect[r.Mod.Path] = r.Indirect
 	}
 
+	// Update or delete the existing Require entries to preserve
+	// only the first for each module path in req.
 	for _, r := range f.Require {
-		if v, ok := need[r.Mod.Path]; ok {
-			r.Mod.Version = v
-			r.Indirect = indirect[r.Mod.Path]
-		} else {
+		v, ok := need[r.Mod.Path]
+		if !ok {
+			// This line is redundant or its path is no longer required at all.
+			// Mark the requirement for deletion in Cleanup.
+			r.Syntax.Token = nil
 			*r = Require{}
 		}
-	}
 
-	var newStmts []Expr
-	for _, stmt := range f.Syntax.Stmt {
-		switch stmt := stmt.(type) {
-		case *LineBlock:
-			if len(stmt.Token) > 0 && stmt.Token[0] == "require" {
-				var newLines []*Line
-				for _, line := range stmt.Line {
-					if p, err := parseString(&line.Token[0]); err == nil && need[p] != "" {
-						if len(line.Comments.Before) == 1 && len(line.Comments.Before[0].Token) == 0 {
-							line.Comments.Before = line.Comments.Before[:0]
-						}
-						line.Token[1] = need[p]
-						delete(need, p)
-						setIndirect(line, indirect[p])
-						newLines = append(newLines, line)
-					}
+		r.Mod.Version = v
+		r.Indirect = indirect[r.Mod.Path]
+
+		if line := r.Syntax; line != nil && len(line.Token) > 0 {
+			if line.InBlock {
+				// If the line is preceded by an empty line, remove it; see
+				// https://golang.org/issue/33779.
+				if len(line.Comments.Before) == 1 && len(line.Comments.Before[0].Token) == 0 {
+					line.Comments.Before = line.Comments.Before[:0]
 				}
-				if len(newLines) == 0 {
-					continue // drop stmt
+				if len(line.Token) >= 2 { // example.com v1.2.3
+					line.Token[1] = v
 				}
-				stmt.Line = newLines
+			} else {
+				if len(line.Token) >= 3 { // require example.com v1.2.3
+					line.Token[2] = v
+				}
 			}
 
-		case *Line:
-			if len(stmt.Token) > 0 && stmt.Token[0] == "require" {
-				if p, err := parseString(&stmt.Token[1]); err == nil && need[p] != "" {
-					stmt.Token[2] = need[p]
-					delete(need, p)
-					setIndirect(stmt, indirect[p])
-				} else {
-					continue // drop stmt
-				}
-			}
+			setIndirect(line, r.Indirect)
 		}
-		newStmts = append(newStmts, stmt)
-	}
-	f.Syntax.Stmt = newStmts
 
+		delete(need, r.Mod.Path)
+	}
+
+	// Add new entries in the last block of the file for any paths that weren't
+	// already present.
+	//
+	// This step is nondeterministic, but the final result will be deterministic
+	// because we will sort the block.
 	for path, vers := range need {
 		f.AddNewRequire(path, vers, indirect[path])
 	}
+
 	f.SortBlocks()
 }
 

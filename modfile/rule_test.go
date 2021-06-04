@@ -92,15 +92,16 @@ var addRequireTests = []struct {
 	},
 }
 
+type require struct {
+	path, vers string
+	indirect   bool
+}
+
 var setRequireTests = []struct {
 	desc string
 	in   string
-	mods []struct {
-		path     string
-		vers     string
-		indirect bool
-	}
-	out string
+	mods []require
+	out  string
 }{
 	{
 		`https://golang.org/issue/45932`,
@@ -111,11 +112,7 @@ var setRequireTests = []struct {
 			x.y/c v1.2.3
 		)
 		`,
-		[]struct {
-			path     string
-			vers     string
-			indirect bool
-		}{
+		[]require{
 			{"x.y/a", "v1.2.3", false},
 			{"x.y/b", "v1.2.3", false},
 			{"x.y/c", "v1.2.3", false},
@@ -138,11 +135,7 @@ var setRequireTests = []struct {
 			x.y/d v1.2.3
 		)
 		`,
-		[]struct {
-			path     string
-			vers     string
-			indirect bool
-		}{
+		[]require{
 			{"x.y/a", "v1.2.3", false},
 			{"x.y/b", "v1.2.3", false},
 			{"x.y/c", "v1.2.3", false},
@@ -168,11 +161,7 @@ var setRequireTests = []struct {
 			x.y/g v1.2.3 //	indirect
 		)
 		`,
-		[]struct {
-			path     string
-			vers     string
-			indirect bool
-		}{
+		[]require{
 			{"x.y/a", "v1.2.3", true},
 			{"x.y/b", "v1.2.3", true},
 			{"x.y/c", "v1.2.3", true},
@@ -191,6 +180,76 @@ var setRequireTests = []struct {
 			x.y/f v1.2.3 //indirect
 			x.y/g v1.2.3 //	indirect
 		)
+		`,
+	},
+	{
+		`existing_multi`,
+		`module m
+		require x.y/a v1.2.3
+		require x.y/b v1.2.3
+		require x.y/c v1.0.0 // not v1.2.3!
+		require x.y/d v1.2.3 // comment kept
+		require x.y/e v1.2.3 // comment kept
+		require x.y/f v1.2.3 // indirect
+		require x.y/g v1.2.3 // indirect
+		`,
+		[]require{
+			{"x.y/h", "v1.2.3", false},
+			{"x.y/a", "v1.2.3", false},
+			{"x.y/b", "v1.2.3", false},
+			{"x.y/c", "v1.2.3", false},
+			{"x.y/d", "v1.2.3", false},
+			{"x.y/e", "v1.2.3", true},
+			{"x.y/f", "v1.2.3", false},
+			{"x.y/g", "v1.2.3", false},
+		},
+		`module m
+		require x.y/a v1.2.3
+
+		require x.y/b v1.2.3
+
+		require x.y/c v1.2.3 // not v1.2.3!
+
+		require x.y/d v1.2.3 // comment kept
+
+		require x.y/e v1.2.3 // indirect; comment kept
+
+		require x.y/f v1.2.3
+
+		require (
+			x.y/g v1.2.3
+			x.y/h v1.2.3
+		)
+		`,
+	},
+	{
+		`existing_duplicate`,
+		`module m
+		require (
+			x.y/a v1.0.0 // zero
+			x.y/a v1.1.0 // one
+			x.y/a v1.2.3 // two
+		)
+		`,
+		[]require{
+			{"x.y/a", "v1.2.3", true},
+		},
+		`module m
+		require x.y/a v1.2.3 // indirect; zero
+		`,
+	},
+	{
+		`existing_duplicate_multi`,
+		`module m
+		require x.y/a v1.0.0 // zero
+		require x.y/a v1.1.0 // one
+		require x.y/a v1.2.3 // two
+		`,
+		[]require{
+			{"x.y/a", "v1.2.3", true},
+		},
+		`module m
+		require x.y/a v1.2.3 // indirect; zero
 		`,
 	},
 }
@@ -942,10 +1001,10 @@ func TestSetRequire(t *testing.T) {
 
 			f := testEdit(t, tt.in, tt.out, true, func(f *File) error {
 				f.SetRequire(mods)
+				f.Cleanup()
 				return nil
 			})
 
-			f.Cleanup()
 			if len(f.Require) != len(mods) {
 				t.Errorf("after Cleanup, len(Require) = %v; want %v", len(f.Require), len(mods))
 			}
