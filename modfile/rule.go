@@ -850,7 +850,7 @@ func (f *File) AddRequire(path, vers string) error {
 				f.Syntax.updateLine(r.Syntax, "require", AutoQuote(path), vers)
 				need = false
 			} else {
-				f.Syntax.removeLine(r.Syntax)
+				r.Syntax.markRemoved()
 				*r = Require{}
 			}
 		}
@@ -902,7 +902,7 @@ func (f *File) SetRequire(req []*Require) {
 		if !ok {
 			// This line is redundant or its path is no longer required at all.
 			// Mark the requirement for deletion in Cleanup.
-			r.Syntax.Token = nil
+			r.Syntax.markRemoved()
 			*r = Require{}
 		}
 
@@ -946,7 +946,7 @@ func (f *File) SetRequire(req []*Require) {
 func (f *File) DropRequire(path string) error {
 	for _, r := range f.Require {
 		if r.Mod.Path == path {
-			f.Syntax.removeLine(r.Syntax)
+			r.Syntax.markRemoved()
 			*r = Require{}
 		}
 	}
@@ -977,7 +977,7 @@ func (f *File) AddExclude(path, vers string) error {
 func (f *File) DropExclude(path, vers string) error {
 	for _, x := range f.Exclude {
 		if x.Mod.Path == path && x.Mod.Version == vers {
-			f.Syntax.removeLine(x.Syntax)
+			x.Syntax.markRemoved()
 			*x = Exclude{}
 		}
 	}
@@ -1008,7 +1008,7 @@ func (f *File) AddReplace(oldPath, oldVers, newPath, newVers string) error {
 				continue
 			}
 			// Already added; delete other replacements for same.
-			f.Syntax.removeLine(r.Syntax)
+			r.Syntax.markRemoved()
 			*r = Replace{}
 		}
 		if r.Old.Path == oldPath {
@@ -1024,7 +1024,7 @@ func (f *File) AddReplace(oldPath, oldVers, newPath, newVers string) error {
 func (f *File) DropReplace(oldPath, oldVers string) error {
 	for _, r := range f.Replace {
 		if r.Old.Path == oldPath && r.Old.Version == oldVers {
-			f.Syntax.removeLine(r.Syntax)
+			r.Syntax.markRemoved()
 			*r = Replace{}
 		}
 	}
@@ -1065,7 +1065,7 @@ func (f *File) AddRetract(vi VersionInterval, rationale string) error {
 func (f *File) DropRetract(vi VersionInterval) error {
 	for _, r := range f.Retract {
 		if r.VersionInterval == vi {
-			f.Syntax.removeLine(r.Syntax)
+			r.Syntax.markRemoved()
 			*r = Retract{}
 		}
 	}
