@@ -78,26 +78,29 @@ func readTest(file string) (testParams, error) {
 	return test, nil
 }
 
-func extractTxtarToTempDir(arc *txtar.Archive) (dir string, err error) {
+func extractTxtarToTempDir(arc *txtar.Archive) (dir string, cleanup func(), err error) {
 	dir, err = ioutil.TempDir("", "zip_test-*")
 	if err != nil {
-		return "", err
+		return "", func() {}, err
+	}
+	cleanup = func() {
+		os.RemoveAll(dir)
 	}
 	defer func() {
 		if err != nil {
-			os.RemoveAll(dir)
+			cleanup()
 		}
 	}()
 	for _, f := range arc.Files {
 		filePath := filepath.Join(dir, f.Name)
 		if err := os.MkdirAll(filepath.Dir(filePath), 0777); err != nil {
-			return "", err
+			return "", func() {}, err
 		}
 		if err := ioutil.WriteFile(filePath, f.Data, 0666); err != nil {
-			return "", err
+			return "", func() {}, err
 		}
 	}
-	return dir, nil
+	return dir, cleanup, nil
 }
 
 func extractTxtarToTempZip(arc *txtar.Archive) (zipPath string, err error) {
@@ -269,15 +272,11 @@ func TestCheckDir(t *testing.T) {
 					break
 				}
 			}
-			tmpDir, err := extractTxtarToTempDir(test.archive)
+			tmpDir, cleanup, err := extractTxtarToTempDir(test.archive)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer func() {
-				if err := os.RemoveAll(tmpDir); err != nil {
-					t.Errorf("removing temp directory: %v", err)
-				}
-			}()
+			defer cleanup()
 
 			// Check the directory.
 			cf, err := modzip.CheckDir(tmpDir)
@@ -461,15 +460,11 @@ func TestCreateFromDir(t *testing.T) {
 			}
 
 			// Write files to a temporary directory.
-			tmpDir, err := extractTxtarToTempDir(test.archive)
+			tmpDir, cleanup, err := extractTxtarToTempDir(test.archive)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer func() {
-				if err := os.RemoveAll(tmpDir); err != nil {
-					t.Errorf("removing temp directory: %v", err)
-				}
-			}()
+			defer cleanup()
 
 			// Create zip from the directory.
 			tmpZip, err := ioutil.TempFile("", "TestCreateFromDir-*.zip")
@@ -1468,3 +1463,304 @@ type zipFile struct {
 func (f zipFile) Path() string                 { return f.name }
 func (f zipFile) Lstat() (os.FileInfo, error)  { return f.f.FileInfo(), nil }
 func (f zipFile) Open() (io.ReadCloser, error) { return f.f.Open() }
+
+func TestCreateFromVCS_basic(t *testing.T) {
+	// Write files to a temporary directory.
+	tmpDir, cleanup, err := extractTxtarToTempDir(txtar.Parse([]byte(`-- go.mod --
+module example.com/foo/bar
+
+go 1.12
+-- a.go --
+package a
+
+var A = 5
+-- b.go --
+package a
+
+var B = 5
+-- c/c.go --
+package c
+
+var C = 5
+-- d/d.go --
+package c
+
+var D = 5
+-- .gitignore --
+b.go
+c/`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	gitInit(t, tmpDir)
+	gitCommit(t, tmpDir)
+
+	for _, tc := range []struct {
+		desc      string
+		subdir    string
+		wantFiles []string
+	}{
+		{
+			desc:      "from root",
+			subdir:    "",
+			wantFiles: []string{"go.mod", "a.go", "d/d.go", ".gitignore"},
+		},
+		{
+			desc:   "from subdir",
+			subdir: "d/",
+			// Note: File paths are zipped as if the subdir were the root. ie d.go instead of d/d.go.
+			wantFiles: []string{"d.go"},
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			// Create zip from the directory.
+			tmpZip := &bytes.Buffer{}
+
+			m := module.Version{Path: "example.com/foo/bar", Version: "v0.0.1"}
+
+			if err := modzip.CreateFromVCS(tmpZip, m, tmpDir, "HEAD", tc.subdir); err != nil {
+				t.Fatal(err)
+			}
+
+			readerAt := bytes.NewReader(tmpZip.Bytes())
+			r, err := zip.NewReader(readerAt, int64(tmpZip.Len()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var gotFiles []string
+			gotMap := map[string]bool{}
+			for _, f := range r.File {
+				gotMap[f.Name] = true
+				gotFiles = append(gotFiles, f.Name)
+			}
+			wantMap := map[string]bool{}
+			for _, f := range tc.wantFiles {
+				p := filepath.Join("example.com", "foo", "bar@v0.0.1", f)
+				wantMap[p] = true
+			}
+
+			// The things that should be there.
+			for f := range gotMap {
+				if !wantMap[f] {
+					t.Errorf("CreatedFromVCS: zipped file contains %s, but expected it not to", f)
+				}
+			}
+
+			// The things that are missing.
+			for f := range wantMap {
+				if !gotMap[f] {
+					t.Errorf("CreatedFromVCS: zipped file doesn't contain %s, but expected it to. all files: %v", f, gotFiles)
+				}
+			}
+		})
+	}
+}
+
+// Test what the experience of creating a zip from a v2 module is like.
+func TestCreateFromVCS_v2(t *testing.T) {
+	// Write files to a temporary directory.
+	tmpDir, cleanup, err := extractTxtarToTempDir(txtar.Parse([]byte(`-- go.mod --
+module example.com/foo/bar
+
+go 1.12
+-- a.go --
+package a
+
+var A = 5
+-- b.go --
+package a
+
+var B = 5
+-- go.mod --
+module example.com/foo/bar
+
+go 1.12
+-- gaz/v2/a_2.go --
+package a
+
+var C = 9
+-- gaz/v2/b_2.go --
+package a
+
+var B = 11
+-- gaz/v2/go.mod --
+module example.com/foo/bar/v2
+
+go 1.12
+-- .gitignore --
+`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	gitInit(t, tmpDir)
+	gitCommit(t, tmpDir)
+
+	// Create zip from the directory.
+	tmpZip := &bytes.Buffer{}
+
+	m := module.Version{Path: "example.com/foo/bar/v2", Version: "v2.0.0"}
+
+	if err := modzip.CreateFromVCS(tmpZip, m, tmpDir, "HEAD", "gaz/v2"); err != nil {
+		t.Fatal(err)
+	}
+
+	readerAt := bytes.NewReader(tmpZip.Bytes())
+	r, err := zip.NewReader(readerAt, int64(tmpZip.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gotFiles []string
+	gotMap := map[string]bool{}
+	for _, f := range r.File {
+		gotMap[f.Name] = true
+		gotFiles = append(gotFiles, f.Name)
+	}
+	wantMap := map[string]bool{
+		"example.com/foo/bar/v2@v2.0.0/a_2.go": true,
+		"example.com/foo/bar/v2@v2.0.0/b_2.go": true,
+		"example.com/foo/bar/v2@v2.0.0/go.mod": true,
+	}
+
+	// The things that should be there.
+	for f := range gotMap {
+		if !wantMap[f] {
+			t.Errorf("CreatedFromVCS: zipped file contains %s, but expected it not to", f)
+		}
+	}
+
+	// The things that are missing.
+	for f := range wantMap {
+		if !gotMap[f] {
+			t.Errorf("CreatedFromVCS: zipped file doesn't contain %s, but expected it to. all files: %v", f, gotFiles)
+		}
+	}
+}
+
+func TestCreateFromVCS_nonGitDir(t *testing.T) {
+	// Write files to a temporary directory.
+	tmpDir, cleanup, err := extractTxtarToTempDir(txtar.Parse([]byte(`-- go.mod --
+module example.com/foo/bar
+
+go 1.12
+-- a.go --
+package a
+
+var A = 5
+`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	// Create zip from the directory.
+	tmpZip, err := ioutil.TempFile("", "TestCreateFromDir-*.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpZipPath := tmpZip.Name()
+	defer func() {
+		tmpZip.Close()
+		os.Remove(tmpZipPath)
+	}()
+
+	m := module.Version{Path: "example.com/foo/bar", Version: "v0.0.1"}
+
+	if err := modzip.CreateFromVCS(tmpZip, m, tmpDir, "HEAD", ""); err == nil {
+		t.Error("CreateFromVCS: expected error, got nil")
+	}
+}
+
+func TestCreateFromVCS_zeroCommitsGitDir(t *testing.T) {
+	// Write files to a temporary directory.
+	tmpDir, cleanup, err := extractTxtarToTempDir(txtar.Parse([]byte(`-- go.mod --
+module example.com/foo/bar
+
+go 1.12
+-- a.go --
+package a
+
+var A = 5
+`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	gitInit(t, tmpDir)
+
+	// Create zip from the directory.
+	tmpZip, err := ioutil.TempFile("", "TestCreateFromDir-*.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpZipPath := tmpZip.Name()
+	defer func() {
+		tmpZip.Close()
+		os.Remove(tmpZipPath)
+	}()
+
+	m := module.Version{Path: "example.com/foo/bar", Version: "v0.0.1"}
+
+	if err := modzip.CreateFromVCS(tmpZip, m, tmpDir, "HEAD", ""); err == nil {
+		t.Error("CreateFromVCS: expected error, got nil")
+	}
+}
+
+// gitInit runs "git init" at the specified dir.
+//
+// Note: some environments - and trybots - don't have git installed. This
+// function will cause the calling test to be skipped if that's the case.
+func gitInit(t *testing.T, dir string) {
+	t.Helper()
+
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("PATH does not contain git")
+	}
+
+	cmd := exec.Command("git", "init")
+	cmd.Dir = dir
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd = exec.Command("git", "config", "user.email", "testing@golangtests.com")
+	cmd.Dir = dir
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd = exec.Command("git", "config", "user.name", "This is the zip Go tests")
+	cmd.Dir = dir
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func gitCommit(t *testing.T, dir string) {
+	t.Helper()
+
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("PATH does not contain git")
+	}
+
+	cmd := exec.Command("git", "add", "-A")
+	cmd.Dir = dir
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		t.Skip("git executable is not available on this machine")
+	}
+
+	cmd = exec.Command("git", "commit", "-m", "some commit")
+	cmd.Dir = dir
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
+}
