@@ -192,8 +192,10 @@ func CheckFiles(files []File) (CheckedFiles, error) {
 }
 
 // checkFiles implements CheckFiles and also returns lists of valid files and
-// their sizes, corresponding to cf.Valid. These lists are used in Crewate to
-// avoid repeated calls to File.Lstat.
+// their sizes, corresponding to cf.Valid. It omits files in submodules, files
+// in vendored packages, symlinked files, and various other unwanted files.
+//
+// The lists returned are used in Create to avoid repeated calls to File.Lstat.
 func checkFiles(files []File) (cf CheckedFiles, validFiles []File, validSizes []int64) {
 	errPaths := make(map[string]struct{})
 	addError := func(path string, omitted bool, err error) {
@@ -254,10 +256,12 @@ func checkFiles(files []File) (cf CheckedFiles, validFiles []File, validSizes []
 			continue
 		}
 		if isVendoredPackage(p) {
+			// Skip files in vendored packages.
 			addError(p, true, errVendored)
 			continue
 		}
 		if inSubmodule(p) {
+			// Skip submodule files.
 			addError(p, true, errSubmoduleFile)
 			continue
 		}
