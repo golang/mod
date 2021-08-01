@@ -299,7 +299,7 @@ func (x *LineBlock) Span() (start, end Position) {
 	return x.Start, x.RParen.Pos.add(")")
 }
 
-// An LParen represents the beginning of a parenthesized line block.
+// A LParen represents the beginning of a parenthesized line block.
 // It is a place to store suffix comments.
 type LParen struct {
 	Comments
@@ -310,7 +310,7 @@ func (x *LParen) Span() (start, end Position) {
 	return x.Pos, x.Pos.add(")")
 }
 
-// An RParen represents the end of a parenthesized line block.
+// A RParen represents the end of a parenthesized line block.
 // It is a place to store whole-line (before) comments.
 type RParen struct {
 	Comments
