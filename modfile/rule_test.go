@@ -367,24 +367,16 @@ var setRequireSeparateIndirectTests = []struct {
 		},
 		`module m
 		require x.y/a v1.2.3
-
+		require x.y/b v1.2.3 // indirect; demoted to indirect
 		require x.y/c v1.2.3 // not v1.2.3!
-
-		require (
-			x.y/d v1.2.3 // comment kept
-			x.y/f v1.2.3 // promoted to direct
-			// promoted to direct
-			x.y/g v1.2.3
-			x.y/h v1.2.3
-		)
-
+		require x.y/d v1.2.3 // comment kept
+		require x.y/e v1.2.3 // indirect; comment kept
+		require x.y/f v1.2.3 // promoted to direct
+		// promoted to direct
+		require x.y/g v1.2.3
 		require x.y/i v1.2.3 // indirect
-
-		require (
-			x.y/b v1.2.3 // indirect; demoted to indirect
-			x.y/e v1.2.3 // indirect; comment kept
-			x.y/j v1.2.3 // indirect
-		)
+		require x.y/j v1.2.3 // indirect
+		require x.y/h v1.2.3
 		`,
 	},
 	{
@@ -430,7 +422,7 @@ var setRequireSeparateIndirectTests = []struct {
 			{"x.y/a", "v1.2.3", true},
 		},
 		`module m
-		require x.y/a v1.2.3 // indirect; one
+		require x.y/a v1.2.3 // indirect; zero
 		`,
 	},
 	{
@@ -446,7 +438,7 @@ var setRequireSeparateIndirectTests = []struct {
 			{"x.y/a", "v1.2.3", false},
 		},
 		`module m
-		require x.y/a v1.2.3 // one
+		require x.y/a v1.2.3 // zero
 		`,
 	},
 	{
@@ -508,16 +500,16 @@ var setRequireSeparateIndirectTests = []struct {
 		},
 		`module m
 		require (
-			x.y/a v1.2.3
-			x.y/d v1.2.3
-		)
-		require (
 			x.y/b v1.2.3 // indirect; comment b preserved
 			x.y/e v1.2.3 // indirect; comment d preserved
 		)
 		require (
 			x.y/c v1.2.3 // indirect; comment c preserved
 			x.y/f v1.2.3 // indirect; comment e preserved
+		)
+		require (
+			x.y/a v1.2.3
+			x.y/d v1.2.3
 		)
 		`,
 	},
@@ -531,22 +523,104 @@ var setRequireSeparateIndirectTests = []struct {
 		`,
 		[]require{
 			{"x.y/a", "v1.2.3", false},
-			{"x.y/b", "v1.2.3", true},  // should remain in the existing mixed block
-			{"x.y/c", "v1.2.3", true},  // should be added in an indirect-only block
-			{"x.y/d", "v1.2.3", false}, // should appear in the existing mixed block
-			{"x.y/e", "v1.2.3", true},  // should be added in the same indirect-only block
+			{"x.y/b", "v1.2.3", true},
+			{"x.y/c", "v1.2.3", true},
+			{"x.y/d", "v1.2.3", false},
+			{"x.y/e", "v1.2.3", true},
 		},
 		`module m
 		require (
 			x.y/a v1.2.3
-			x.y/b v1.2.3 // indirect
 			x.y/d v1.2.3
 		)
 		require (
+			x.y/b v1.2.3 // indirect
 			x.y/c v1.2.3 // indirect
 			x.y/e v1.2.3 // indirect
 		)
 		`,
+	},
+	{
+		`preserve_block_comment_indirect_to_direct`,
+		`module m
+		// save
+		require (
+			x.y/a v1.2.3 // indirect
+		)
+		`,
+		[]require{
+			{"x.y/a", "v1.2.3", false},
+		},
+		`module m
+
+		// save
+		require x.y/a v1.2.3
+		`,
+	},
+	{
+		`preserve_block_comment_direct_to_indirect`,
+		`module m
+		// save
+		require (
+			x.y/a v1.2.3
+		)
+		`,
+		[]require{
+			{"x.y/a", "v1.2.3", true},
+		},
+		`module m
+
+		// save
+		require x.y/a v1.2.3 // indirect
+		`,
+	},
+	{
+		`regroup_flat_uncommented_block`,
+		`module m
+		require (
+			x.y/a v1.0.0 // a
+			x.y/b v1.0.0 // indirect; b
+			x.y/c v1.0.0 // indirect
+		)`,
+		[]require{
+			{"x.y/a", "v1.2.3", false},
+			{"x.y/b", "v1.2.3", true},
+			{"x.y/c", "v1.2.3", true},
+			{"x.y/d", "v1.2.3", false},
+		},
+		`module m
+		require (
+			x.y/a v1.2.3 // a
+			x.y/d v1.2.3
+		)
+		require (
+			x.y/b v1.2.3 // indirect; b
+			x.y/c v1.2.3 // indirect
+		)`,
+	},
+	{
+		`dont_regroup_flat_commented_block`,
+		`module m
+		// dont regroup
+		require (
+			x.y/a v1.0.0
+			x.y/b v1.0.0 // indirect
+			x.y/c v1.0.0 // indirect
+		)`,
+		[]require{
+			{"x.y/a", "v1.2.3", false},
+			{"x.y/b", "v1.2.3", true},
+			{"x.y/c", "v1.2.3", true},
+			{"x.y/d", "v1.2.3", false},
+		},
+		`module m
+		// dont regroup
+		require (
+			x.y/a v1.2.3
+			x.y/b v1.2.3 // indirect
+			x.y/c v1.2.3 // indirect
+		)
+		require x.y/d v1.2.3`,
 	},
 }
 
