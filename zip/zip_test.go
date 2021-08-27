@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -1669,8 +1670,15 @@ var A = 5
 
 	m := module.Version{Path: "example.com/foo/bar", Version: "v0.0.1"}
 
-	if err := modzip.CreateFromVCS(tmpZip, m, tmpDir, "HEAD", ""); err == nil {
-		t.Error("CreateFromVCS: expected error, got nil")
+	err = modzip.CreateFromVCS(tmpZip, m, tmpDir, "HEAD", "")
+	if err == nil {
+		t.Fatal("CreateFromVCS: expected error, got nil")
+	}
+	var gotErr *modzip.UnrecognizedVCSError
+	if !errors.As(err, &gotErr) {
+		t.Errorf("CreateFromVCS: returned error does not unwrap to modzip.ErrUnrecognisedVCS, but expected it to. returned error: %v", err)
+	} else if gotErr.RepoRoot != tmpDir {
+		t.Errorf("CreateFromVCS: returned error has RepoRoot %q, but want %q. returned error: %v", gotErr.RepoRoot, tmpDir, err)
 	}
 }
 
