@@ -340,6 +340,28 @@ var setRequireSeparateIndirectTests = []struct {
 		`,
 	},
 	{
+		`existing_line`,
+		`module m
+		require x.y/a v1.0.0
+		require x.y/c v1.0.0 // indirect
+		`,
+		[]require{
+			{"x.y/a", "v1.2.3", false},
+			{"x.y/b", "v1.2.3", false},
+			{"x.y/c", "v1.2.3", true},
+			{"x.y/d", "v1.2.3", true},
+		},
+		`module m
+		require (
+			x.y/a v1.2.3
+			x.y/b v1.2.3
+		)
+		require (
+			x.y/c v1.2.3 // indirect
+			x.y/d v1.2.3 // indirect
+		)`,
+	},
+	{
 		`existing_multi`,
 		`module m
 		require x.y/a v1.2.3
@@ -366,7 +388,10 @@ var setRequireSeparateIndirectTests = []struct {
 			{"x.y/g", "v1.2.3", false},
 		},
 		`module m
-		require x.y/a v1.2.3
+		require (
+			x.y/a v1.2.3
+			x.y/h v1.2.3
+		)
 		require x.y/b v1.2.3 // indirect; demoted to indirect
 		require x.y/c v1.2.3 // not v1.2.3!
 		require x.y/d v1.2.3 // comment kept
@@ -376,7 +401,6 @@ var setRequireSeparateIndirectTests = []struct {
 		require x.y/g v1.2.3
 		require x.y/i v1.2.3 // indirect
 		require x.y/j v1.2.3 // indirect
-		require x.y/h v1.2.3
 		`,
 	},
 	{
