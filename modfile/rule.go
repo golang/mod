@@ -1009,9 +1009,8 @@ func (f *File) SetRequireSeparateIndirect(req []*Require) {
 		// We may insert new requirements into the last uncommented
 		// direct-only and indirect-only blocks. We may also move requirements
 		// to the opposite block if their indirect markings change.
-		lastDirectBlock, lastIndirectBlock *LineBlock
-		lastDirectBlockIndex               = -1
-		lastIndirectBlockIndex             = -1
+		lastDirectIndex   = -1
+		lastIndirectIndex = -1
 
 		// If there are no direct-only or indirect-only blocks, a new block may
 		// be inserted after the last require line or block.
@@ -1033,6 +1032,13 @@ func (f *File) SetRequireSeparateIndirect(req []*Require) {
 			}
 			lastRequireIndex = i
 			requireLineOrBlockCount++
+			if !hasComments(stmt.Comments) {
+				if isIndirect(stmt) {
+					lastIndirectIndex = i
+				} else {
+					lastDirectIndex = i
+				}
+			}
 
 		case *LineBlock:
 			if len(stmt.Token) == 0 || stmt.Token[0] != "require" {
@@ -1054,12 +1060,10 @@ func (f *File) SetRequireSeparateIndirect(req []*Require) {
 				}
 			}
 			if allDirect {
-				lastDirectBlock = stmt
-				lastDirectBlockIndex = i
+				lastDirectIndex = i
 			}
 			if allIndirect {
-				lastIndirectBlock = stmt
-				lastIndirectBlockIndex = i
+				lastIndirectIndex = i
 			}
 		}
 	}
@@ -1067,33 +1071,56 @@ func (f *File) SetRequireSeparateIndirect(req []*Require) {
 	oneFlatUncommentedBlock := requireLineOrBlockCount == 1 &&
 		!hasComments(*f.Syntax.Stmt[lastRequireIndex].Comment())
 
-	// Create direct and indirect blocks if needed. It's okay if they're empty.
-	// Cleanup will remove them and convert one-line blocks to lines.
-	if lastDirectBlock == nil {
-		lastDirectBlock = &LineBlock{Token: []string{"require"}}
-		i := len(f.Syntax.Stmt)
-		if lastIndirectBlockIndex >= 0 {
-			i = lastIndirectBlockIndex
-			lastIndirectBlockIndex++
-		} else if lastRequireIndex >= 0 {
-			i = lastRequireIndex + 1
-		}
+	// Create direct and indirect blocks if needed. Convert lines into blocks
+	// if needed. If we end up with an empty block or a one-line block,
+	// Cleanup will delete it or convert it to a line later.
+	insertBlock := func(i int) *LineBlock {
+		block := &LineBlock{Token: []string{"require"}}
 		f.Syntax.Stmt = append(f.Syntax.Stmt, nil)
 		copy(f.Syntax.Stmt[i+1:], f.Syntax.Stmt[i:])
-		f.Syntax.Stmt[i] = lastDirectBlock
-		lastDirectBlockIndex = i
+		f.Syntax.Stmt[i] = block
+		return block
 	}
 
-	if lastIndirectBlock == nil {
-		lastIndirectBlock = &LineBlock{Token: []string{"require"}}
-		i := len(f.Syntax.Stmt)
-		if lastDirectBlockIndex >= 0 {
-			i = lastDirectBlockIndex + 1
+	ensureBlock := func(i int) *LineBlock {
+		switch stmt := f.Syntax.Stmt[i].(type) {
+		case *LineBlock:
+			return stmt
+		case *Line:
+			block := &LineBlock{
+				Token: []string{"require"},
+				Line:  []*Line{stmt},
+			}
+			stmt.Token = stmt.Token[1:] // remove "require"
+			stmt.InBlock = true
+			f.Syntax.Stmt[i] = block
+			return block
+		default:
+			panic(fmt.Sprintf("unexpected statement: %v", stmt))
 		}
-		f.Syntax.Stmt = append(f.Syntax.Stmt, nil)
-		copy(f.Syntax.Stmt[i+1:], f.Syntax.Stmt[i:])
-		f.Syntax.Stmt[i] = lastIndirectBlock
-		lastIndirectBlockIndex = i
+	}
+
+	var lastDirectBlock *LineBlock
+	if lastDirectIndex < 0 {
+		if lastIndirectIndex >= 0 {
+			lastDirectIndex = lastIndirectIndex
+			lastIndirectIndex++
+		} else if lastRequireIndex >= 0 {
+			lastDirectIndex = lastRequireIndex + 1
+		} else {
+			lastDirectIndex = len(f.Syntax.Stmt)
+		}
+		lastDirectBlock = insertBlock(lastDirectIndex)
+	} else {
+		lastDirectBlock = ensureBlock(lastDirectIndex)
+	}
+
+	var lastIndirectBlock *LineBlock
+	if lastIndirectIndex < 0 {
+		lastIndirectIndex = lastDirectIndex + 1
+		lastIndirectBlock = insertBlock(lastIndirectIndex)
+	} else {
+		lastIndirectBlock = ensureBlock(lastIndirectIndex)
 	}
 
 	// Delete requirements we don't want anymore.
