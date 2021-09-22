@@ -353,6 +353,8 @@ func TestMatchPrefixPatterns(t *testing.T) {
 		globs, target string
 		want          bool
 	}{
+		{"", "rsc.io/quote", false},
+		{"/", "rsc.io/quote", false},
 		{"*/quote", "rsc.io/quote", true},
 		{"*/quo", "rsc.io/quote", false},
 		{"*/quo??", "rsc.io/quote", true},
@@ -360,17 +362,21 @@ func TestMatchPrefixPatterns(t *testing.T) {
 		{"*quo*", "rsc.io/quote", false},
 		{"rsc.io", "rsc.io/quote", true},
 		{"*.io", "rsc.io/quote", true},
-		{"rsc.io/", "rsc.io/quote", false},
+		{"rsc.io/", "rsc.io/quote", true},
 		{"rsc", "rsc.io/quote", false},
 		{"rsc*", "rsc.io/quote", true},
 
 		{"rsc.io", "rsc.io/quote/v3", true},
 		{"*/quote", "rsc.io/quote/v3", true},
+		{"*/quote/", "rsc.io/quote/v3", true},
 		{"*/quote/*", "rsc.io/quote/v3", true},
+		{"*/quote/*/", "rsc.io/quote/v3", true},
 		{"*/v3", "rsc.io/quote/v3", false},
 		{"*/*/v3", "rsc.io/quote/v3", true},
 		{"*/*/*", "rsc.io/quote/v3", true},
+		{"*/*/*/", "rsc.io/quote/v3", true},
 		{"*/*/*", "rsc.io/quote", false},
+		{"*/*/*/", "rsc.io/quote", false},
 
 		{"*/*/*,,", "rsc.io/quote", false},
 		{"*/*/*,,*/quote", "rsc.io/quote", true},
