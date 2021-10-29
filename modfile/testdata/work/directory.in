@@ -1,7 +1,0 @@
-directory "../foo"
-
-directory (
-	"/bar"
-
-	"baz"
-)

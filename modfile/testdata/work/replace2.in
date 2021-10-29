@@ -1,4 +1,4 @@
-directory "abc"
+use "abc"
 
 replace (
 	"xyz" v1.2.3 => "/tmp/z"

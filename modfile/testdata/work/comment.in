@@ -1,8 +1,8 @@
 // comment
-directory "x" // eol
+use "x" // eol
 // mid comment
 
 // comment 2
 // comment 2 line 2
-directory "y" // eoy
+use "y" // eoy
 // comment 3

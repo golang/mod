@@ -12,8 +12,8 @@ import (
 	"testing"
 )
 
-// TODO(#45713): Update these tests once AddDirectory sets the module path.
-var workAddDirectoryTests = []struct {
+// TODO(#45713): Update these tests once AddUse sets the module path.
+var workAddUseTests = []struct {
 	desc       string
 	in         string
 	path       string
@@ -24,7 +24,7 @@ var workAddDirectoryTests = []struct {
 		`empty`,
 		``,
 		`foo`, `bar`,
-		`directory foo`,
+		`use foo`,
 	},
 	{
 		`go_stmt_only`,
@@ -32,32 +32,32 @@ var workAddDirectoryTests = []struct {
 		`,
 		`foo`, `bar`,
 		`go 1.17
-		directory foo
+		use foo
 		`,
 	},
 	{
-		`directory_line_present`,
+		`use_line_present`,
 		`go 1.17
-		directory baz`,
+		use baz`,
 		`foo`, `bar`,
 		`go 1.17
-		directory (
+		use (
 			baz
 		  foo
 		)
 		`,
 	},
 	{
-		`directory_block_present`,
+		`use_block_present`,
 		`go 1.17
-		directory (
+		use (
 			baz
 			quux
 		)
 		`,
 		`foo`, `bar`,
 		`go 1.17
-		directory (
+		use (
 			baz
 		  quux
 			foo
@@ -65,14 +65,14 @@ var workAddDirectoryTests = []struct {
 		`,
 	},
 	{
-		`directory_and_replace_present`,
+		`use_and_replace_present`,
 		`go 1.17
-		directory baz
+		use baz
 		replace a => ./b
 		`,
 		`foo`, `bar`,
 		`go 1.17
-		directory (
+		use (
 			baz
 			foo
 		)
@@ -81,7 +81,7 @@ var workAddDirectoryTests = []struct {
 	},
 }
 
-var workDropDirectoryTests = []struct {
+var workDropUseTests = []struct {
 	desc string
 	in   string
 	path string
@@ -102,46 +102,46 @@ var workDropDirectoryTests = []struct {
 		`,
 	},
 	{
-		`singled_directory`,
+		`single_use`,
 		`go 1.17
-		directory foo`,
+		use foo`,
 		`foo`,
 		`go 1.17
 		`,
 	},
 	{
-		`directory_block`,
+		`use_block`,
 		`go 1.17
-		directory (
+		use (
 			foo
 			bar
 			baz
 		)`,
 		`bar`,
 		`go 1.17
-		directory (
+		use (
 			foo
 			baz
 		)`,
 	},
 	{
-		`directory_multi`,
+		`use_multi`,
 		`go 1.17
-		directory (
+		use (
 			foo
 			bar
 			baz
 		)
-		directory foo
-		directory quux
-		directory foo`,
+		use foo
+		use quux
+		use foo`,
 		`foo`,
 		`go 1.17
-		directory (
+		use (
 			bar
 			baz
 		)
-		directory quux`,
+		use quux`,
 	},
 }
 
@@ -167,38 +167,38 @@ var workAddGoTests = []struct {
 		go 1.17`,
 	},
 	{
-		`directory_after_replace`,
+		`use_after_replace`,
 		`
 		replace example.com/foo => ../bar
-		directory foo
+		use foo
 		`,
 		`1.17`,
 		`
 		go 1.17
 		replace example.com/foo => ../bar
-		directory foo
+		use foo
 		`,
 	},
 	{
-		`directory_before_replace`,
-		`directory foo
+		`use_before_replace`,
+		`use foo
 		replace example.com/foo => ../bar
 		`,
 		`1.17`,
 		`
 		go 1.17
-		directory foo
+		use foo
 		replace example.com/foo => ../bar
 		`,
 	},
 	{
-		`directory_only`,
-		`directory foo
+		`use_only`,
+		`use foo
 		`,
 		`1.17`,
 		`
 		go 1.17
-		directory foo
+		use foo
 		`,
 	},
 	{
@@ -216,24 +216,24 @@ var workSortBlocksTests = []struct {
 	desc, in, out string
 }{
 	{
-		`directory_duplicates_not_removed`,
+		`use_duplicates_not_removed`,
 		`go 1.17
-		directory foo
-		directory bar
-		directory (
+		use foo
+		use bar
+		use (
 			foo
 		)`,
 		`go 1.17
-		directory foo
-		directory bar
-		directory (
+		use foo
+		use bar
+		use (
 			foo
 		)`,
 	},
 	{
 		`replace_duplicates_removed`,
 		`go 1.17
-		directory foo
+		use foo
 		replace x.y/z v1.0.0 => ./a
 		replace x.y/z v1.1.0 => ./b
 		replace (
@@ -241,7 +241,7 @@ var workSortBlocksTests = []struct {
 		)
 		`,
 		`go 1.17
-		directory foo
+		use foo
 		replace x.y/z v1.1.0 => ./b
 		replace (
 			x.y/z v1.0.0 => ./c
@@ -250,21 +250,21 @@ var workSortBlocksTests = []struct {
 	},
 }
 
-func TestAddDirectory(t *testing.T) {
-	for _, tt := range workAddDirectoryTests {
+func TestAddUse(t *testing.T) {
+	for _, tt := range workAddUseTests {
 		t.Run(tt.desc, func(t *testing.T) {
 			testWorkEdit(t, tt.in, tt.out, func(f *WorkFile) error {
-				return f.AddDirectory(tt.path, tt.modulePath)
+				return f.AddUse(tt.path, tt.modulePath)
 			})
 		})
 	}
 }
 
-func TestDropDirectory(t *testing.T) {
-	for _, tt := range workDropDirectoryTests {
+func TestDropUse(t *testing.T) {
+	for _, tt := range workDropUseTests {
 		t.Run(tt.desc, func(t *testing.T) {
 			testWorkEdit(t, tt.in, tt.out, func(f *WorkFile) error {
-				if err := f.DropDirectory(tt.path); err != nil {
+				if err := f.DropUse(tt.path); err != nil {
 					return err
 				}
 				f.Cleanup()
