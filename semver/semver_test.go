@@ -154,6 +154,22 @@ func TestCompare(t *testing.T) {
 			}
 		}
 	}
+
+	// These additional tests are for explicitly comparing versions
+	for _, tt := range []struct {
+		v, w string
+		r    int
+	}{
+		{"v1", "v1", 0},
+		{"v2", "v1", 1},
+		{"v1", "v2", -1},
+		{"v1.19", "v1.2", -1},
+	} {
+		cmp := Compare(tt.v, tt.w)
+		if cmp != tt.r {
+			t.Errorf("Compare(%q, %q) = %d, want %d", tt.v, tt.w, cmp, tt.r)
+		}
+	}
 }
 
 func TestSort(t *testing.T) {

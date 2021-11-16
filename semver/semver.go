@@ -317,17 +317,10 @@ func compareInt(x, y string) int {
 	if x == y {
 		return 0
 	}
-	if len(x) < len(y) {
-		return -1
-	}
-	if len(x) > len(y) {
-		return +1
-	}
 	if x < y {
 		return -1
-	} else {
-		return +1
 	}
+	return +1
 }
 
 func comparePrerelease(x, y string) int {
