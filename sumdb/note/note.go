@@ -496,8 +496,9 @@ func (e *InvalidSignatureError) Error() string {
 }
 
 var (
-	errMalformedNote = errors.New("malformed note")
-	errInvalidSigner = errors.New("invalid signer")
+	errMalformedNote      = errors.New("malformed note")
+	errInvalidSigner      = errors.New("invalid signer")
+	errMismatchedVerifier = errors.New("verifier name or hash doesn't match signature")
 
 	sigSplit  = []byte("\n\n")
 	sigPrefix = []byte("— ")
@@ -587,6 +588,11 @@ func Open(msg []byte, known Verifiers) (*Note, error) {
 		}
 		if err != nil {
 			return nil, err
+		}
+
+		// Check that known.Verifier returned the right verifier.
+		if v.Name() != name || v.KeyHash() != hash {
+			return nil, errMismatchedVerifier
 		}
 
 		// Drop repeated signatures by a single verifier.

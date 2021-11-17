@@ -297,6 +297,12 @@ func (e *errSigner) Sign([]byte) ([]byte, error) {
 	return nil, errSurprise
 }
 
+type fixedVerifier struct{ v Verifier }
+
+func (v fixedVerifier) Verifier(name string, hash uint32) (Verifier, error) {
+	return v.v, nil
+}
+
 func TestOpen(t *testing.T) {
 	peterKey := "PeterNeumann+c74f20a3+ARpc2QcUPDhMQegwxbzhKqiBfsVkmqq/LDE4izWy10TW"
 	peterVerifier, err := NewVerifier(peterKey)
@@ -426,6 +432,18 @@ then you don't know what your problem is.
 		if n != nil || err == nil || err.Error() != "malformed note" {
 			t.Fatalf("Open bad msg = %v, %v, want nil, malformed note error\nmsg:\n%s", n, err, msg)
 		}
+	}
+
+	// Verifiers returns a Verifier for the wrong name or hash.
+	misnamedSig := strings.Replace(peterSig, "PeterNeumann", "CarmenSandiego", -1)
+	_, err = Open([]byte(text+"\n"+misnamedSig), fixedVerifier{peterVerifier})
+	if err != errMismatchedVerifier {
+		t.Fatalf("Open with wrong Verifier, err=%v, want errMismatchedVerifier", err)
+	}
+	wrongHash := strings.Replace(peterSig, "x08g", "xxxx", -1)
+	_, err = Open([]byte(text+"\n"+wrongHash), fixedVerifier{peterVerifier})
+	if err != errMismatchedVerifier {
+		t.Fatalf("Open with wrong Verifier, err=%v, want errMismatchedVerifier", err)
 	}
 }
 
