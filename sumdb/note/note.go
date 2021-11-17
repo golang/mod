@@ -16,9 +16,7 @@
 //
 // A Go module database server signs texts using public key cryptography.
 // A given server may have multiple public keys, each
-// identified by the first 32 bits of the SHA-256 hash of
-// the concatenation of the server name, a newline, and
-// the encoded public key.
+// identified by a 32-bit hash of the public key.
 //
 // Verifying Notes
 //
@@ -77,9 +75,7 @@
 // A signature is a base64 encoding of 4+n bytes.
 //
 // The first four bytes in the signature are the uint32 key hash
-// stored in big-endian order, which is to say they are the first
-// four bytes of the truncated SHA-256 used to derive the key hash
-// in the first place.
+// stored in big-endian order.
 //
 // The remaining n bytes are the result of using the specified key
 // to sign the note text (including the final newline but not the
