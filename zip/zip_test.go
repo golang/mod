@@ -999,7 +999,7 @@ func TestUnzipSizeLimitsSpecial(t *testing.T) {
 // we should not let that happen accidentally.
 func TestVCS(t *testing.T) {
 	if testing.Short() {
-		t.Skip()
+		t.Skip("skipping VCS cloning in -short mode")
 	}
 
 	var downloadErrorCount int32
@@ -1213,7 +1213,7 @@ func TestVCS(t *testing.T) {
 			if have, ok := haveVCS[test.vcs]; !ok {
 				t.Fatalf("unknown vcs: %s", test.vcs)
 			} else if !have {
-				t.Skip()
+				t.Skipf("no %s executable in path", test.vcs)
 			}
 			t.Parallel()
 
@@ -1723,10 +1723,11 @@ var A = 5
 // Note: some environments - and trybots - don't have git installed. This
 // function will cause the calling test to be skipped if that's the case.
 func gitInit(t *testing.T, dir string) {
-	t.Helper()
-
 	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("PATH does not contain git")
+		t.Skip("no git executable in path")
+	}
+	if runtime.GOOS == "plan9" {
+		t.Skip("plan9 git does not support the full git command line")
 	}
 
 	cmd := exec.Command("git", "init")
@@ -1752,10 +1753,11 @@ func gitInit(t *testing.T, dir string) {
 }
 
 func gitCommit(t *testing.T, dir string) {
-	t.Helper()
-
 	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("PATH does not contain git")
+		t.Skip("no git executable in path")
+	}
+	if runtime.GOOS == "plan9" {
+		t.Skip("plan9 git does not support the full git command line")
 	}
 
 	cmd := exec.Command("git", "add", "-A")
