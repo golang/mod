@@ -1037,12 +1037,11 @@ func TestVCS(t *testing.T) {
 	var downloadErrorCount int32
 	const downloadErrorLimit = 3
 
-	haveVCS := make(map[string]bool)
-	if _, err := gitPath(); err == nil {
-		haveVCS["git"] = true
-	}
-	if _, err := exec.LookPath("hg"); err == nil {
-		haveVCS["hg"] = true
+	_, gitErr := gitPath()
+	_, hgErr := exec.LookPath("hg")
+	haveVCS := map[string]bool{
+		"git": gitErr == nil,
+		"hg":  hgErr == nil,
 	}
 
 	for _, test := range []struct {
