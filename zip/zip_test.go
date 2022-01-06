@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -30,6 +31,37 @@ import (
 )
 
 const emptyHash = "h1:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="
+
+var gitOnce struct {
+	path string
+	err  error
+	sync.Once
+}
+
+// gitPath returns the path to a usable "git" command,
+// or a non-nil error.
+func gitPath() (string, error) {
+	gitOnce.Do(func() {
+		path, err := exec.LookPath("git")
+		if err != nil {
+			gitOnce.err = err
+			return
+		}
+		if runtime.GOOS == "plan9" {
+			gitOnce.err = errors.New("plan9 git does not support the full git command line")
+		}
+		gitOnce.path = path
+	})
+
+	return gitOnce.path, gitOnce.err
+}
+
+func mustHaveGit(t *testing.T) {
+	if _, err := gitPath(); err != nil {
+		t.Helper()
+		t.Skipf("skipping: %v", err)
+	}
+}
 
 type testParams struct {
 	path, version, wantErr, hash string
@@ -1006,9 +1038,11 @@ func TestVCS(t *testing.T) {
 	const downloadErrorLimit = 3
 
 	haveVCS := make(map[string]bool)
-	for _, vcs := range []string{"git", "hg"} {
-		_, err := exec.LookPath(vcs)
-		haveVCS[vcs] = err == nil
+	if _, err := gitPath(); err == nil {
+		haveVCS["git"] = true
+	}
+	if _, err := exec.LookPath("hg"); err == nil {
+		haveVCS["hg"] = true
 	}
 
 	for _, test := range []struct {
@@ -1466,6 +1500,8 @@ func (f zipFile) Lstat() (os.FileInfo, error)  { return f.f.FileInfo(), nil }
 func (f zipFile) Open() (io.ReadCloser, error) { return f.f.Open() }
 
 func TestCreateFromVCS_basic(t *testing.T) {
+	mustHaveGit(t)
+
 	// Write files to a temporary directory.
 	tmpDir, cleanup, err := extractTxtarToTempDir(txtar.Parse([]byte(`-- go.mod --
 module example.com/foo/bar
@@ -1561,6 +1597,8 @@ c/`)))
 
 // Test what the experience of creating a zip from a v2 module is like.
 func TestCreateFromVCS_v2(t *testing.T) {
+	mustHaveGit(t)
+
 	// Write files to a temporary directory.
 	tmpDir, cleanup, err := extractTxtarToTempDir(txtar.Parse([]byte(`-- go.mod --
 module example.com/foo/bar
@@ -1642,6 +1680,8 @@ go 1.12
 }
 
 func TestCreateFromVCS_nonGitDir(t *testing.T) {
+	mustHaveGit(t)
+
 	// Write files to a temporary directory.
 	tmpDir, cleanup, err := extractTxtarToTempDir(txtar.Parse([]byte(`-- go.mod --
 module example.com/foo/bar
@@ -1683,6 +1723,8 @@ var A = 5
 }
 
 func TestCreateFromVCS_zeroCommitsGitDir(t *testing.T) {
+	mustHaveGit(t)
+
 	// Write files to a temporary directory.
 	tmpDir, cleanup, err := extractTxtarToTempDir(txtar.Parse([]byte(`-- go.mod --
 module example.com/foo/bar
@@ -1723,12 +1765,8 @@ var A = 5
 // Note: some environments - and trybots - don't have git installed. This
 // function will cause the calling test to be skipped if that's the case.
 func gitInit(t *testing.T, dir string) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("no git executable in path")
-	}
-	if runtime.GOOS == "plan9" {
-		t.Skip("plan9 git does not support the full git command line")
-	}
+	t.Helper()
+	mustHaveGit(t)
 
 	cmd := exec.Command("git", "init")
 	cmd.Dir = dir
@@ -1753,18 +1791,14 @@ func gitInit(t *testing.T, dir string) {
 }
 
 func gitCommit(t *testing.T, dir string) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("no git executable in path")
-	}
-	if runtime.GOOS == "plan9" {
-		t.Skip("plan9 git does not support the full git command line")
-	}
+	t.Helper()
+	mustHaveGit(t)
 
 	cmd := exec.Command("git", "add", "-A")
 	cmd.Dir = dir
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		t.Skip("git executable is not available on this machine")
+		t.Fatal(err)
 	}
 
 	cmd = exec.Command("git", "commit", "-m", "some commit")
