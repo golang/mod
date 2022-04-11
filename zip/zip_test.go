@@ -905,9 +905,10 @@ func TestUnzipSizeLimitsSpecial(t *testing.T) {
 	}
 
 	for _, test := range []struct {
-		desc, wantErr string
-		m             module.Version
-		writeZip      func(t *testing.T, zipFile *os.File)
+		desc               string
+		wantErr1, wantErr2 string
+		m                  module.Version
+		writeZip           func(t *testing.T, zipFile *os.File)
 	}{
 		{
 			desc: "large_zip",
@@ -920,7 +921,7 @@ func TestUnzipSizeLimitsSpecial(t *testing.T) {
 			// this is not an error we care about; we're just testing whether
 			// Unzip checks the size of the file before opening.
 			// It's harder to create a valid zip file of exactly the right size.
-			wantErr: "not a valid zip file",
+			wantErr1: "not a valid zip file",
 		}, {
 			desc: "too_large_zip",
 			m:    module.Version{Path: "example.com/m", Version: "v1.0.0"},
@@ -929,7 +930,7 @@ func TestUnzipSizeLimitsSpecial(t *testing.T) {
 					t.Fatal(err)
 				}
 			},
-			wantErr: "module zip file is too large",
+			wantErr1: "module zip file is too large",
 		}, {
 			desc: "size_is_a_lie",
 			m:    module.Version{Path: "example.com/m", Version: "v1.0.0"},
@@ -978,7 +979,10 @@ func TestUnzipSizeLimitsSpecial(t *testing.T) {
 					t.Fatal(err)
 				}
 			},
-			wantErr: "uncompressed size of file example.com/m@v1.0.0/go.mod is larger than declared size",
+			// wantErr1 is for 1.18 and earlier,
+			// wantErr2 is for 1.19 and later.
+			wantErr1: "uncompressed size of file example.com/m@v1.0.0/go.mod is larger than declared size",
+			wantErr2: "not a valid zip file",
 		},
 	} {
 		test := test
@@ -1004,12 +1008,21 @@ func TestUnzipSizeLimitsSpecial(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer os.RemoveAll(tmpDir)
-			if err := modzip.Unzip(tmpDir, test.m, tmpZipPath); err == nil && test.wantErr != "" {
-				t.Fatalf("unexpected success; want error containing %q", test.wantErr)
-			} else if err != nil && test.wantErr == "" {
+
+			want := func() string {
+				s := fmt.Sprintf("%q", test.wantErr1)
+				if test.wantErr2 != "" {
+					s = fmt.Sprintf("%q or %q", test.wantErr1, test.wantErr2)
+				}
+				return s
+			}
+
+			if err := modzip.Unzip(tmpDir, test.m, tmpZipPath); err == nil && test.wantErr1 != "" {
+				t.Fatalf("unexpected success; want error containing %s", want())
+			} else if err != nil && test.wantErr1 == "" {
 				t.Fatalf("got error %q; want success", err)
-			} else if err != nil && !strings.Contains(err.Error(), test.wantErr) {
-				t.Fatalf("got error %q; want error containing %q", err, test.wantErr)
+			} else if err != nil && !strings.Contains(err.Error(), test.wantErr1) && (test.wantErr2 == "" || !strings.Contains(err.Error(), test.wantErr2)) {
+				t.Fatalf("got error %q; want error containing %s", err, want())
 			}
 		})
 	}
