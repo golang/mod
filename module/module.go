@@ -102,9 +102,9 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+	"errors"
 
 	"golang.org/x/mod/semver"
-	errors "golang.org/x/xerrors"
 )
 
 // A Version (for clients, a module.Version) is defined by a module path and version pair.
