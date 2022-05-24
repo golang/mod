@@ -1331,6 +1331,18 @@ var fixVersionTests = []struct {
 		fix:  fixV,
 	},
 	{
+		desc:    `replace_version_in_path`,
+		in:      `replace example.com/m@v1.0.0 => example.com/m@v1.1.0`,
+		wantErr: `replacement module must match format 'path version', not 'path@version'`,
+		fix:     fixV,
+	},
+	{
+		desc:    `replace_version_in_later_path`,
+		in:      `replace example.com/m => example.com/m@v1.1.0`,
+		wantErr: `replacement module must match format 'path version', not 'path@version'`,
+		fix:     fixV,
+	},
+	{
 		desc: `exclude`,
 		in:   `exclude example.com/m 1.0.0`,
 		want: `exclude example.com/m v1.0.0`,
