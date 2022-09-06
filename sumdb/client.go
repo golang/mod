@@ -80,7 +80,7 @@ var ErrSecurity = errors.New("security error: misbehaving server")
 type Client struct {
 	ops ClientOps // access to operations in the external world
 
-	didLookup uint32
+	didLookup atomic.Uint32
 
 	// one-time initialized data
 	initOnce   sync.Once
@@ -160,7 +160,7 @@ func (c *Client) initWork() {
 // SetTileHeight can be called at most once,
 // and if so it must be called before the first call to Lookup.
 func (c *Client) SetTileHeight(height int) {
-	if atomic.LoadUint32(&c.didLookup) != 0 {
+	if c.didLookup.Load() != 0 {
 		panic("SetTileHeight used after Lookup")
 	}
 	if height <= 0 {
@@ -178,7 +178,7 @@ func (c *Client) SetTileHeight(height int) {
 // SetGONOSUMDB can be called at most once,
 // and if so it must be called before the first call to Lookup.
 func (c *Client) SetGONOSUMDB(list string) {
-	if atomic.LoadUint32(&c.didLookup) != 0 {
+	if c.didLookup.Load() != 0 {
 		panic("SetGONOSUMDB used after Lookup")
 	}
 	if c.nosumdb != "" {
@@ -244,7 +244,7 @@ func globsMatchPath(globs, target string) bool {
 // The version may end in a /go.mod suffix, in which case Lookup returns
 // the go.sum lines for the module's go.mod-only hash.
 func (c *Client) Lookup(path, vers string) (lines []string, err error) {
-	atomic.StoreUint32(&c.didLookup, 1)
+	c.didLookup.Store(1)
 
 	if c.skip(path) {
 		return nil, ErrGONOSUMDB

@@ -18,7 +18,7 @@ type parCache struct {
 }
 
 type cacheEntry struct {
-	done   uint32
+	done   atomic.Uint32
 	mu     sync.Mutex
 	result interface{}
 }
@@ -32,11 +32,11 @@ func (c *parCache) Do(key interface{}, f func() interface{}) interface{} {
 		entryIface, _ = c.m.LoadOrStore(key, new(cacheEntry))
 	}
 	e := entryIface.(*cacheEntry)
-	if atomic.LoadUint32(&e.done) == 0 {
+	if e.done.Load() == 0 {
 		e.mu.Lock()
-		if atomic.LoadUint32(&e.done) == 0 {
+		if e.done.Load() == 0 {
 			e.result = f()
-			atomic.StoreUint32(&e.done, 1)
+			e.done.Store(1)
 		}
 		e.mu.Unlock()
 	}
@@ -52,7 +52,7 @@ func (c *parCache) Get(key interface{}) interface{} {
 		return nil
 	}
 	e := entryIface.(*cacheEntry)
-	if atomic.LoadUint32(&e.done) == 0 {
+	if e.done.Load() == 0 {
 		return nil
 	}
 	return e.result
