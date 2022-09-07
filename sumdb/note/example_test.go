@@ -93,7 +93,7 @@ func ExampleSign_add_signatures() {
 	}
 	verifiers := note.VerifierList(verifier)
 
-	n, err := note.Open([]byte(msg), verifiers)
+	n, err := note.Open(msg, verifiers)
 	if err != nil {
 		fmt.Println(err)
 		return

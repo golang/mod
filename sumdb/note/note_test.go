@@ -178,7 +178,7 @@ func newSignerFromEd25519Seed(name string, seed []byte) (Signer, error) {
 
 	s := &signer{
 		name: name,
-		hash: uint32(hash),
+		hash: hash,
 		sign: func(msg []byte) ([]byte, error) {
 			return ed25519.Sign(priv, msg), nil
 		},
