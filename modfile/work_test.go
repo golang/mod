@@ -6,7 +6,7 @@ package modfile
 
 import (
 	"bytes"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -308,7 +308,7 @@ func TestWorkPrintParse(t *testing.T) {
 		name := filepath.Base(out)
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			data, err := ioutil.ReadFile(out)
+			data, err := os.ReadFile(out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -360,7 +360,7 @@ func TestWorkPrintParse(t *testing.T) {
 			}
 
 			if strings.HasSuffix(out, ".in") {
-				golden, err := ioutil.ReadFile(strings.TrimSuffix(out, ".in") + ".golden")
+				golden, err := os.ReadFile(strings.TrimSuffix(out, ".in") + ".golden")
 				if err != nil {
 					t.Fatal(err)
 				}
