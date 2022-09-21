@@ -38,6 +38,16 @@ var gitOnce struct {
 	sync.Once
 }
 
+func init() {
+	if os.Getenv("GO_BUILDER_NAME") != "" || os.Getenv("GIT_TRACE_CURL") == "1" {
+		// Enable extra Git logging to diagnose networking issues.
+		// (These environment variables will be inherited by subprocesses.)
+		os.Setenv("GIT_TRACE_CURL", "1")
+		os.Setenv("GIT_TRACE_CURL_NO_DATA", "1")
+		os.Setenv("GIT_REDACT_COOKIES", "o,SSO,GSSO_Uberproxy")
+	}
+}
+
 // gitPath returns the path to a usable "git" command,
 // or a non-nil error.
 func gitPath() (string, error) {
@@ -56,7 +66,7 @@ func gitPath() (string, error) {
 	return gitOnce.path, gitOnce.err
 }
 
-func mustHaveGit(t *testing.T) {
+func mustHaveGit(t testing.TB) {
 	if _, err := gitPath(); err != nil {
 		t.Helper()
 		t.Skipf("skipping: %v", err)
@@ -111,33 +121,24 @@ func readTest(file string) (testParams, error) {
 	return test, nil
 }
 
-func extractTxtarToTempDir(arc *txtar.Archive) (dir string, cleanup func(), err error) {
-	dir, err = ioutil.TempDir("", "zip_test-*")
-	if err != nil {
-		return "", func() {}, err
-	}
-	cleanup = func() {
-		os.RemoveAll(dir)
-	}
-	defer func() {
-		if err != nil {
-			cleanup()
-		}
-	}()
+func extractTxtarToTempDir(t testing.TB, arc *txtar.Archive) (dir string, err error) {
+	dir = t.TempDir()
 	for _, f := range arc.Files {
 		filePath := filepath.Join(dir, f.Name)
 		if err := os.MkdirAll(filepath.Dir(filePath), 0777); err != nil {
-			return "", func() {}, err
+			return "", err
 		}
 		if err := ioutil.WriteFile(filePath, f.Data, 0666); err != nil {
-			return "", func() {}, err
+			return "", err
 		}
 	}
-	return dir, cleanup, nil
+	return dir, nil
 }
 
-func extractTxtarToTempZip(arc *txtar.Archive) (zipPath string, err error) {
-	zipFile, err := ioutil.TempFile("", "zip_test-*.zip")
+func extractTxtarToTempZip(t *testing.T, arc *txtar.Archive) (zipPath string, err error) {
+	zipPath = filepath.Join(t.TempDir(), "txtar.zip")
+
+	zipFile, err := os.Create(zipPath)
 	if err != nil {
 		return "", err
 	}
@@ -145,10 +146,8 @@ func extractTxtarToTempZip(arc *txtar.Archive) (zipPath string, err error) {
 		if cerr := zipFile.Close(); err == nil && cerr != nil {
 			err = cerr
 		}
-		if err != nil {
-			os.Remove(zipFile.Name())
-		}
 	}()
+
 	zw := zip.NewWriter(zipFile)
 	for _, f := range arc.Files {
 		zf, err := zw.Create(f.Name)
@@ -305,11 +304,10 @@ func TestCheckDir(t *testing.T) {
 					break
 				}
 			}
-			tmpDir, cleanup, err := extractTxtarToTempDir(test.archive)
+			tmpDir, err := extractTxtarToTempDir(t, test.archive)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer cleanup()
 
 			// Check the directory.
 			cf, err := modzip.CheckDir(tmpDir)
@@ -366,15 +364,10 @@ func TestCheckZip(t *testing.T) {
 					break
 				}
 			}
-			tmpZipPath, err := extractTxtarToTempZip(test.archive)
+			tmpZipPath, err := extractTxtarToTempZip(t, test.archive)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer func() {
-				if err := os.Remove(tmpZipPath); err != nil {
-					t.Errorf("removing temp zip file: %v", err)
-				}
-			}()
 
 			// Check the zip.
 			m := module.Version{Path: test.path, Version: test.version}
@@ -493,11 +486,10 @@ func TestCreateFromDir(t *testing.T) {
 			}
 
 			// Write files to a temporary directory.
-			tmpDir, cleanup, err := extractTxtarToTempDir(test.archive)
+			tmpDir, err := extractTxtarToTempDir(t, test.archive)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer cleanup()
 
 			// Create zip from the directory.
 			tmpZip, err := ioutil.TempFile("", "TestCreateFromDir-*.zip")
@@ -632,15 +624,10 @@ func TestUnzip(t *testing.T) {
 			}
 
 			// Convert txtar to temporary zip file.
-			tmpZipPath, err := extractTxtarToTempZip(test.archive)
+			tmpZipPath, err := extractTxtarToTempZip(t, test.archive)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer func() {
-				if err := os.Remove(tmpZipPath); err != nil {
-					t.Errorf("removing temp zip file: %v", err)
-				}
-			}()
 
 			// Extract to a temporary directory.
 			tmpDir, err := ioutil.TempDir("", "TestUnzip")
@@ -1263,8 +1250,7 @@ func TestVCS(t *testing.T) {
 			}
 			t.Parallel()
 
-			repo, dl, cleanup, err := downloadVCSZip(test.vcs, test.url, test.rev, test.subdir)
-			defer cleanup()
+			repo, dl, err := downloadVCSZip(t, test.vcs, test.url, test.rev, test.subdir)
 			if err != nil {
 				// This may fail if there's a problem with the network or upstream
 				// repository. The package being tested doesn't directly interact with
@@ -1331,7 +1317,7 @@ func TestVCS(t *testing.T) {
 				files = append(files, zipFile{name: name, f: f})
 			}
 			if !haveLICENSE && subdir != "" {
-				license, err := downloadVCSFile(test.vcs, repo, test.rev, "LICENSE")
+				license, err := downloadVCSFile(t, test.vcs, repo, test.rev, "LICENSE")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -1378,41 +1364,31 @@ func TestVCS(t *testing.T) {
 	}
 }
 
-func downloadVCSZip(vcs, url, rev, subdir string) (repoDir string, dl *os.File, cleanup func(), err error) {
-	var cleanups []func()
-	cleanup = func() {
-		for i := len(cleanups) - 1; i >= 0; i-- {
-			cleanups[i]()
-		}
-	}
-	repoDir, err = ioutil.TempDir("", "downloadVCSZip")
-	if err != nil {
-		return "", nil, cleanup, err
-	}
-	cleanups = append(cleanups, func() { os.RemoveAll(repoDir) })
+func downloadVCSZip(t testing.TB, vcs, url, rev, subdir string) (repoDir string, dl *os.File, err error) {
+	repoDir = t.TempDir()
 
 	switch vcs {
 	case "git":
 		// Create a repository and download the revision we want.
-		if err := run(repoDir, "git", "init", "--bare"); err != nil {
-			return "", nil, cleanup, err
+		if _, err := run(t, repoDir, "git", "init", "--bare"); err != nil {
+			return "", nil, err
 		}
 		if err := os.MkdirAll(filepath.Join(repoDir, "info"), 0777); err != nil {
-			return "", nil, cleanup, err
+			return "", nil, err
 		}
 		attrFile, err := os.OpenFile(filepath.Join(repoDir, "info", "attributes"), os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
 		if err != nil {
-			return "", nil, cleanup, err
+			return "", nil, err
 		}
 		if _, err := attrFile.Write([]byte("\n* -export-subst -export-ignore\n")); err != nil {
 			attrFile.Close()
-			return "", nil, cleanup, err
+			return "", nil, err
 		}
 		if err := attrFile.Close(); err != nil {
-			return "", nil, cleanup, err
+			return "", nil, err
 		}
-		if err := run(repoDir, "git", "remote", "add", "origin", "--", url); err != nil {
-			return "", nil, cleanup, err
+		if _, err := run(t, repoDir, "git", "remote", "add", "origin", "--", url); err != nil {
+			return "", nil, err
 		}
 		var refSpec string
 		if strings.HasPrefix(rev, "v") {
@@ -1420,86 +1396,105 @@ func downloadVCSZip(vcs, url, rev, subdir string) (repoDir string, dl *os.File, 
 		} else {
 			refSpec = fmt.Sprintf("%s:refs/dummy", rev)
 		}
-		if err := run(repoDir, "git", "fetch", "-f", "--depth=1", "origin", refSpec); err != nil {
-			return "", nil, cleanup, err
+		if _, err := run(t, repoDir, "git", "fetch", "-f", "--depth=1", "origin", refSpec); err != nil {
+			return "", nil, err
 		}
 
 		// Create an archive.
-		tmpZipFile, err := ioutil.TempFile("", "downloadVCSZip-*.zip")
+		zipPath := filepath.Join(t.TempDir(), "vcs.zip")
+		tmpZipFile, err := os.Create(zipPath)
 		if err != nil {
-			return "", nil, cleanup, err
+			return "", nil, err
 		}
-		cleanups = append(cleanups, func() {
-			name := tmpZipFile.Name()
-			tmpZipFile.Close()
-			os.Remove(name)
-		})
+		t.Cleanup(func() { tmpZipFile.Close() })
 		subdirArg := subdir
 		if subdir == "" {
 			subdirArg = "."
 		}
+
 		cmd := exec.Command("git", "-c", "core.autocrlf=input", "-c", "core.eol=lf", "archive", "--format=zip", "--prefix=prefix/", rev, "--", subdirArg)
 		cmd.Dir = repoDir
 		cmd.Stdout = tmpZipFile
-		if err := cmd.Run(); err != nil {
-			return "", nil, cleanup, err
+		stderr := new(strings.Builder)
+		cmd.Stderr = stderr
+
+		err = cmd.Run()
+		if stderr.Len() > 0 && (err != nil || testing.Verbose()) {
+			t.Logf("%v: %v\n%s", err, cmd, stderr)
+		} else if err != nil {
+			t.Logf("%v: %v", err, cmd)
+		} else {
+			t.Logf("%v", cmd)
 		}
+		if err != nil {
+			return "", nil, err
+		}
+
 		if _, err := tmpZipFile.Seek(0, 0); err != nil {
-			return "", nil, cleanup, err
+			return "", nil, err
 		}
-		return repoDir, tmpZipFile, cleanup, nil
+		return repoDir, tmpZipFile, nil
 
 	case "hg":
 		// Clone the whole repository.
-		if err := run(repoDir, "hg", "clone", "-U", "--", url, "."); err != nil {
-			return "", nil, cleanup, err
+		if _, err := run(t, repoDir, "hg", "clone", "-U", "--", url, "."); err != nil {
+			return "", nil, err
 		}
 
 		// Create an archive.
 		tmpZipFile, err := ioutil.TempFile("", "downloadVCSZip-*.zip")
 		if err != nil {
-			return "", nil, cleanup, err
+			return "", nil, err
 		}
 		tmpZipPath := tmpZipFile.Name()
 		tmpZipFile.Close()
-		cleanups = append(cleanups, func() { os.Remove(tmpZipPath) })
+		t.Cleanup(func() { os.Remove(tmpZipPath) })
 		args := []string{"archive", "-t", "zip", "--no-decode", "-r", rev, "--prefix=prefix/"}
 		if subdir != "" {
 			args = append(args, "-I", subdir+"/**")
 		}
 		args = append(args, "--", tmpZipPath)
-		if err := run(repoDir, "hg", args...); err != nil {
-			return "", nil, cleanup, err
+		if _, err := run(t, repoDir, "hg", args...); err != nil {
+			return "", nil, err
 		}
 		if tmpZipFile, err = os.Open(tmpZipPath); err != nil {
-			return "", nil, cleanup, err
+			return "", nil, err
 		}
-		cleanups = append(cleanups, func() { tmpZipFile.Close() })
-		return repoDir, tmpZipFile, cleanup, err
+		t.Cleanup(func() { tmpZipFile.Close() })
+		return repoDir, tmpZipFile, err
 
 	default:
-		return "", nil, cleanup, fmt.Errorf("vcs %q not supported", vcs)
+		return "", nil, fmt.Errorf("vcs %q not supported", vcs)
 	}
 }
 
-func downloadVCSFile(vcs, repo, rev, file string) ([]byte, error) {
+func downloadVCSFile(t testing.TB, vcs, repo, rev, file string) ([]byte, error) {
+	t.Helper()
 	switch vcs {
 	case "git":
-		cmd := exec.Command("git", "cat-file", "blob", rev+":"+file)
-		cmd.Dir = repo
-		return cmd.Output()
+		return run(t, repo, "git", "cat-file", "blob", rev+":"+file)
 	default:
 		return nil, fmt.Errorf("vcs %q not supported", vcs)
 	}
 }
 
-func run(dir string, name string, args ...string) error {
+func run(t testing.TB, dir string, name string, args ...string) ([]byte, error) {
+	t.Helper()
+
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s: %v", strings.Join(args, " "), err)
+	stderr := new(strings.Builder)
+	cmd.Stderr = stderr
+
+	out, err := cmd.Output()
+	if stderr.Len() > 0 && (err != nil || testing.Verbose()) {
+		t.Logf("%v: %v\n%s", err, cmd, stderr)
+	} else if err != nil {
+		t.Logf("%v: %v", err, cmd)
+	} else {
+		t.Logf("%v", cmd)
 	}
-	return nil
+	return out, err
 }
 
 type zipFile struct {
@@ -1515,7 +1510,7 @@ func TestCreateFromVCS_basic(t *testing.T) {
 	mustHaveGit(t)
 
 	// Write files to a temporary directory.
-	tmpDir, cleanup, err := extractTxtarToTempDir(txtar.Parse([]byte(`-- go.mod --
+	tmpDir, err := extractTxtarToTempDir(t, txtar.Parse([]byte(`-- go.mod --
 module example.com/foo/bar
 
 go 1.12
@@ -1541,7 +1536,6 @@ c/`)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanup()
 
 	gitInit(t, tmpDir)
 	gitCommit(t, tmpDir)
@@ -1612,7 +1606,7 @@ func TestCreateFromVCS_v2(t *testing.T) {
 	mustHaveGit(t)
 
 	// Write files to a temporary directory.
-	tmpDir, cleanup, err := extractTxtarToTempDir(txtar.Parse([]byte(`-- go.mod --
+	tmpDir, err := extractTxtarToTempDir(t, txtar.Parse([]byte(`-- go.mod --
 module example.com/foo/bar
 
 go 1.12
@@ -1645,7 +1639,6 @@ go 1.12
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanup()
 
 	gitInit(t, tmpDir)
 	gitCommit(t, tmpDir)
@@ -1695,7 +1688,7 @@ func TestCreateFromVCS_nonGitDir(t *testing.T) {
 	mustHaveGit(t)
 
 	// Write files to a temporary directory.
-	tmpDir, cleanup, err := extractTxtarToTempDir(txtar.Parse([]byte(`-- go.mod --
+	tmpDir, err := extractTxtarToTempDir(t, txtar.Parse([]byte(`-- go.mod --
 module example.com/foo/bar
 
 go 1.12
@@ -1707,7 +1700,6 @@ var A = 5
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanup()
 
 	// Create zip from the directory.
 	tmpZip, err := ioutil.TempFile("", "TestCreateFromDir-*.zip")
@@ -1738,7 +1730,7 @@ func TestCreateFromVCS_zeroCommitsGitDir(t *testing.T) {
 	mustHaveGit(t)
 
 	// Write files to a temporary directory.
-	tmpDir, cleanup, err := extractTxtarToTempDir(txtar.Parse([]byte(`-- go.mod --
+	tmpDir, err := extractTxtarToTempDir(t, txtar.Parse([]byte(`-- go.mod --
 module example.com/foo/bar
 
 go 1.12
@@ -1750,7 +1742,6 @@ var A = 5
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanup()
 
 	gitInit(t, tmpDir)
 
@@ -1776,47 +1767,29 @@ var A = 5
 //
 // Note: some environments - and trybots - don't have git installed. This
 // function will cause the calling test to be skipped if that's the case.
-func gitInit(t *testing.T, dir string) {
+func gitInit(t testing.TB, dir string) {
 	t.Helper()
 	mustHaveGit(t)
 
-	cmd := exec.Command("git", "init")
-	cmd.Dir = dir
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if _, err := run(t, dir, "git", "init"); err != nil {
 		t.Fatal(err)
 	}
-
-	cmd = exec.Command("git", "config", "user.email", "testing@golangtests.com")
-	cmd.Dir = dir
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if _, err := run(t, dir, "git", "config", "user.name", "Go Gopher"); err != nil {
 		t.Fatal(err)
 	}
-
-	cmd = exec.Command("git", "config", "user.name", "This is the zip Go tests")
-	cmd.Dir = dir
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if _, err := run(t, dir, "git", "config", "user.email", "gopher@golang.org"); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func gitCommit(t *testing.T, dir string) {
+func gitCommit(t testing.TB, dir string) {
 	t.Helper()
 	mustHaveGit(t)
 
-	cmd := exec.Command("git", "add", "-A")
-	cmd.Dir = dir
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if _, err := run(t, dir, "git", "add", "-A"); err != nil {
 		t.Fatal(err)
 	}
-
-	cmd = exec.Command("git", "commit", "-m", "some commit")
-	cmd.Dir = dir
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if _, err := run(t, dir, "git", "commit", "-m", "some commit"); err != nil {
 		t.Fatal(err)
 	}
 }
