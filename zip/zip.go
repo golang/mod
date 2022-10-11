@@ -619,7 +619,7 @@ func (e *UnrecognizedVCSError) Error() string {
 	return fmt.Sprintf("could not find a recognized version control system at %q", e.RepoRoot)
 }
 
-// filterGitIgnored filters out any files that are git ignored in the directory.
+// filesInGitRepo filters out any files that are git ignored in the directory.
 func filesInGitRepo(dir, rev, subdir string) ([]File, error) {
 	stderr := bytes.Buffer{}
 	stdout := bytes.Buffer{}
