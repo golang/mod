@@ -90,7 +90,10 @@ func DirFiles(dir, prefix string) ([]string, error) {
 		}
 		if info.IsDir() {
 			return nil
+		} else if file == dir {
+			return fmt.Errorf("%s is not a directory", dir)
 		}
+
 		rel := file
 		if dir != "." {
 			rel = file[len(dir)+1:]
