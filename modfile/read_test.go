@@ -7,7 +7,6 @@ package modfile
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -43,13 +42,13 @@ func TestPrintGolden(t *testing.T) {
 // It reads the file named in, reformats it, and compares
 // the result to the file named out.
 func testPrint(t *testing.T, in, out string) {
-	data, err := ioutil.ReadFile(in)
+	data, err := os.ReadFile(in)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
-	golden, err := ioutil.ReadFile(out)
+	golden, err := os.ReadFile(out)
 	if err != nil {
 		t.Error(err)
 		return
@@ -157,7 +156,7 @@ func TestPrintParse(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			data, err := ioutil.ReadFile(out)
+			data, err := os.ReadFile(out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -212,7 +211,7 @@ func TestPrintParse(t *testing.T) {
 			}
 
 			if strings.HasSuffix(out, ".in") {
-				golden, err := ioutil.ReadFile(strings.TrimSuffix(out, ".in") + ".golden")
+				golden, err := os.ReadFile(strings.TrimSuffix(out, ".in") + ".golden")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -346,14 +345,14 @@ func (eq *eqchecker) checkValue(v, w reflect.Value) error {
 
 // diff returns the output of running diff on b1 and b2.
 func diff(b1, b2 []byte) (data []byte, err error) {
-	f1, err := ioutil.TempFile("", "testdiff")
+	f1, err := os.CreateTemp("", "testdiff")
 	if err != nil {
 		return nil, err
 	}
 	defer os.Remove(f1.Name())
 	defer f1.Close()
 
-	f2, err := ioutil.TempFile("", "testdiff")
+	f2, err := os.CreateTemp("", "testdiff")
 	if err != nil {
 		return nil, err
 	}
