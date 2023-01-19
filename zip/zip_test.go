@@ -398,13 +398,13 @@ func TestCheckZip(t *testing.T) {
 
 func TestCreate(t *testing.T) {
 	testDir := filepath.FromSlash("testdata/create")
-	testInfos, err := os.ReadDir(testDir)
+	testEntries, err := os.ReadDir(testDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, testInfo := range testInfos {
-		testInfo := testInfo
-		base := filepath.Base(testInfo.Name())
+	for _, testEntry := range testEntries {
+		testEntry := testEntry
+		base := filepath.Base(testEntry.Name())
 		if filepath.Ext(base) != ".txt" {
 			continue
 		}
@@ -412,7 +412,7 @@ func TestCreate(t *testing.T) {
 			t.Parallel()
 
 			// Load the test.
-			testPath := filepath.Join(testDir, testInfo.Name())
+			testPath := filepath.Join(testDir, testEntry.Name())
 			test, err := readTest(testPath)
 			if err != nil {
 				t.Fatal(err)
@@ -461,13 +461,13 @@ func TestCreate(t *testing.T) {
 
 func TestCreateFromDir(t *testing.T) {
 	testDir := filepath.FromSlash("testdata/create_from_dir")
-	testInfos, err := os.ReadDir(testDir)
+	testEntries, err := os.ReadDir(testDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, testInfo := range testInfos {
-		testInfo := testInfo
-		base := filepath.Base(testInfo.Name())
+	for _, testEntry := range testEntries {
+		testEntry := testEntry
+		base := filepath.Base(testEntry.Name())
 		if filepath.Ext(base) != ".txt" {
 			continue
 		}
@@ -475,7 +475,7 @@ func TestCreateFromDir(t *testing.T) {
 			t.Parallel()
 
 			// Load the test.
-			testPath := filepath.Join(testDir, testInfo.Name())
+			testPath := filepath.Join(testDir, testEntry.Name())
 			test, err := readTest(testPath)
 			if err != nil {
 				t.Fatal(err)
@@ -591,18 +591,18 @@ func TestCreateFromDirSpecial(t *testing.T) {
 
 func TestUnzip(t *testing.T) {
 	testDir := filepath.FromSlash("testdata/unzip")
-	testInfos, err := os.ReadDir(testDir)
+	testEntries, err := os.ReadDir(testDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, testInfo := range testInfos {
-		base := filepath.Base(testInfo.Name())
+	for _, testEntry := range testEntries {
+		base := filepath.Base(testEntry.Name())
 		if filepath.Ext(base) != ".txt" {
 			continue
 		}
 		t.Run(base[:len(base)-len(".txt")], func(t *testing.T) {
 			// Load the test.
-			testPath := filepath.Join(testDir, testInfo.Name())
+			testPath := filepath.Join(testDir, testEntry.Name())
 			test, err := readTest(testPath)
 			if err != nil {
 				t.Fatal(err)
