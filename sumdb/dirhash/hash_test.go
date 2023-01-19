@@ -46,11 +46,7 @@ func TestHash1(t *testing.T) {
 }
 
 func TestHashDir(t *testing.T) {
-	dir, err := os.MkdirTemp("", "dirhash-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "xyz"), []byte("data for xyz"), 0666); err != nil {
 		t.Fatal(err)
 	}
@@ -68,11 +64,10 @@ func TestHashDir(t *testing.T) {
 }
 
 func TestHashZip(t *testing.T) {
-	f, err := os.CreateTemp("", "dirhash-test-")
+	f, err := os.CreateTemp(t.TempDir(), "dirhash-test-")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(f.Name())
 	defer f.Close()
 
 	z := zip.NewWriter(f)
@@ -105,11 +100,7 @@ func TestHashZip(t *testing.T) {
 
 func TestDirFiles(t *testing.T) {
 	t.Run("valid directory with files", func(t *testing.T) {
-		dir, err := os.MkdirTemp("", "dirfiles-test-")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer os.RemoveAll(dir)
+		dir := t.TempDir()
 		if err := os.WriteFile(filepath.Join(dir, "xyz"), []byte("data for xyz"), 0666); err != nil {
 			t.Fatal(err)
 		}
