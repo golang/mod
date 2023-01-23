@@ -33,7 +33,9 @@ type Hash func(files []string, open func(string) (io.ReadCloser, error)) (string
 // Hash1 is "h1:" followed by the base64-encoded SHA-256 hash of a summary
 // prepared as if by the Unix command:
 //
-//	find . -type f | sort | sha256sum
+//	find . -type f -printf 'prefix/%P\n' | sort | xargs sha256sum
+//
+// (where prefix is something like foo/bar@v1.2.3)
 //
 // More precisely, the hashed summary contains a single line for each file in the list,
 // ordered by sort.Strings applied to the file names, where each line consists of
