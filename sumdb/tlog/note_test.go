@@ -115,3 +115,17 @@ func TestParseRecord(t *testing.T) {
 		}
 	}
 }
+
+func FuzzParseTree(f *testing.F) {
+	f.Add([]byte("go.sum database tree\n123456789012\nTszzRgjTG6xce+z2AG31kAXYKBgQVtCSCE40HmuwBb0=\n"))
+	f.Fuzz(func(t *testing.T, text []byte) {
+		ParseTree(text)
+	})
+}
+
+func FuzzParseRecord(f *testing.F) {
+	f.Add([]byte("12345\nhello\n\n"))
+	f.Fuzz(func(t *testing.T, msg []byte) {
+		ParseRecord(msg)
+	})
+}
