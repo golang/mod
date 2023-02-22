@@ -10,6 +10,7 @@ import (
 	"testing"
 )
 
+// testHashStorage implements tlog.HashReader
 type testHashStorage []Hash
 
 func (t testHashStorage) ReadHash(level int, n int64) (Hash, error) {
@@ -266,4 +267,77 @@ func TestTilePath(t *testing.T) {
 			t.Errorf("ParseTilePath(%q) = %+v, want %+v", tt.path, tile, tt.tile)
 		}
 	}
+}
+
+// newTestHashStorage creates hash storage from given records
+func newTestHashStorage(t *testing.T, records [][]byte) testHashStorage {
+	var storage testHashStorage
+	for i, record := range records {
+		hashes, err := StoredHashes(int64(i), record, storage)
+		if err != nil {
+			t.Fatal(err)
+		}
+		storage = append(storage, hashes...)
+	}
+	return storage
+}
+
+// FuzzProveTreeSatisfiesCheckTree tests that proofs returned by ProveTree satisfy CheckTree
+func FuzzProveTreeSatisfiesCheckTree(f *testing.F) {
+	// ideally would generate two-dimensional [][]byte but not supported
+	f.Fuzz(func(t *testing.T, prefixSize int64, bytes []byte) {
+		size := int64(len(bytes))
+		if prefixSize <= 0 || prefixSize > size {
+			t.Skip()
+		}
+		// improvise two-dimensional data from input
+		records := make([][]byte, size)
+		for i := range bytes {
+			records[i] = bytes[:i]
+		}
+		storage := newTestHashStorage(t, records)
+		treeHash, err := TreeHash(size, storage)
+		if err != nil {
+			t.Fatal(err)
+		}
+		prefixHash, err := TreeHash(prefixSize, storage)
+		if err != nil {
+			t.Fatal(err)
+		}
+		proof, err := ProveTree(size, prefixSize, storage)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = CheckTree(proof, size, treeHash, prefixSize, prefixHash)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+// FuzzProveRecordSatisfiesCheckRecord tests that proofs returned by ProveRecord satisfy CheckRecord
+func FuzzProveRecordSatisfiesCheckRecord(f *testing.F) {
+	f.Fuzz(func(t *testing.T, index int64, bytes []byte) {
+		size := int64(len(bytes))
+		if index < 0 || index >= size {
+			t.Skip()
+		}
+		records := make([][]byte, size)
+		for i := range bytes {
+			records[i] = bytes[:i]
+		}
+		storage := newTestHashStorage(t, records)
+		treeHash, err := TreeHash(size, storage)
+		if err != nil {
+			t.Fatal(err)
+		}
+		proof, err := ProveRecord(size, index, storage)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = CheckRecord(proof, size, treeHash, index, RecordHash(records[index]))
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
 }
