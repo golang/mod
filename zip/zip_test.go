@@ -1532,7 +1532,7 @@ c/`)))
 			}
 			wantMap := map[string]bool{}
 			for _, f := range tc.wantFiles {
-				p := filepath.Join("example.com", "foo", "bar@v0.0.1", f)
+				p := path.Join("example.com", "foo", "bar@v0.0.1", f)
 				wantMap[p] = true
 			}
 
