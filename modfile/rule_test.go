@@ -1224,6 +1224,52 @@ var sortBlocksTests = []struct {
 		`,
 		false,
 	},
+	// Exclude blocks are sorted using semver in ascending order
+	// in go.mod files that opt in to Go version 1.21 or newer.
+	{
+		`sort_exclude_go121_semver`,
+		`module m
+		go 1.21
+		exclude (
+			b.example/m v0.9.0
+			a.example/m v1.0.0
+			b.example/m v0.10.0
+			c.example/m v1.1.0
+			b.example/m v0.11.0
+		)`,
+		`module m
+		go 1.21
+		exclude (
+			a.example/m v1.0.0
+			b.example/m v0.9.0
+			b.example/m v0.10.0
+			b.example/m v0.11.0
+			c.example/m v1.1.0
+		)
+		`,
+		true,
+	},
+	{
+		`sort_exclude_!go121_lexicographically`, // Maintain the previous (less featureful) behavior to avoid unnecessary churn.
+		`module m
+		exclude (
+			b.example/m v0.9.0
+			a.example/m v1.0.0
+			b.example/m v0.10.0
+			c.example/m v1.1.0
+			b.example/m v0.11.0
+		)`,
+		`module m
+		exclude (
+			a.example/m v1.0.0
+			b.example/m v0.10.0
+			b.example/m v0.11.0
+			b.example/m v0.9.0
+			c.example/m v1.1.0
+		)
+		`,
+		true,
+	},
 }
 
 var addRetractValidateVersionTests = []struct {
