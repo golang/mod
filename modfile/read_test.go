@@ -181,7 +181,13 @@ func TestPrintParse(t *testing.T) {
 			pf1, err := Parse(base, data, nil)
 			if err != nil {
 				switch base {
-				case "testdata/replace2.in", "testdata/gopkg.in.golden":
+				case "testdata/block.golden",
+					"testdata/block.in",
+					"testdata/comment.golden",
+					"testdata/comment.in",
+					"testdata/rule1.golden":
+					// ignore
+				default:
 					t.Errorf("should parse %v: %v", base, err)
 				}
 			}
@@ -425,12 +431,13 @@ func TestModulePath(t *testing.T) {
 	}
 }
 
-func TestGoVersion(t *testing.T) {
+func TestParseVersions(t *testing.T) {
 	tests := []struct {
 		desc, input string
 		ok          bool
 		laxOK       bool // ok=true implies laxOK=true; only set if ok=false
 	}{
+		// go lines
 		{desc: "empty", input: "module m\ngo \n", ok: false},
 		{desc: "one", input: "module m\ngo 1\n", ok: false},
 		{desc: "two", input: "module m\ngo 1.22\n", ok: true},
@@ -438,15 +445,23 @@ func TestGoVersion(t *testing.T) {
 		{desc: "before", input: "module m\ngo v1.2\n", ok: false},
 		{desc: "after", input: "module m\ngo 1.2rc1\n", ok: true},
 		{desc: "space", input: "module m\ngo 1.2 3.4\n", ok: false},
-		{desc: "alt1", input: "module m\ngo 1.2.3\n", ok: true, laxOK: true},
-		{desc: "alt2", input: "module m\ngo 1.2rc1\n", ok: true, laxOK: true},
-		{desc: "alt3", input: "module m\ngo 1.2beta1\n", ok: true, laxOK: true},
+		{desc: "alt1", input: "module m\ngo 1.2.3\n", ok: true},
+		{desc: "alt2", input: "module m\ngo 1.2rc1\n", ok: true},
+		{desc: "alt3", input: "module m\ngo 1.2beta1\n", ok: true},
 		{desc: "alt4", input: "module m\ngo 1.2.beta1\n", ok: false, laxOK: true},
 		{desc: "alt1", input: "module m\ngo v1.2.3\n", ok: false, laxOK: true},
 		{desc: "alt2", input: "module m\ngo v1.2rc1\n", ok: false, laxOK: true},
 		{desc: "alt3", input: "module m\ngo v1.2beta1\n", ok: false, laxOK: true},
 		{desc: "alt4", input: "module m\ngo v1.2.beta1\n", ok: false, laxOK: true},
 		{desc: "alt1", input: "module m\ngo v1.2\n", ok: false, laxOK: true},
+
+		// toolchain lines
+		{desc: "tool", input: "module m\ntoolchain go1.2\n", ok: true},
+		{desc: "tool1", input: "module m\ntoolchain go1.2.3\n", ok: true},
+		{desc: "tool2", input: "module m\ntoolchain go1.2rc1\n", ok: true},
+		{desc: "tool3", input: "module m\ntoolchain gccgo-go1.2rc1\n", ok: true},
+		{desc: "tool4", input: "module m\ntoolchain local\n", ok: true},
+		{desc: "tool5", input: "module m\ntoolchain inconceivable!\n", ok: false, laxOK: true},
 	}
 	t.Run("Strict", func(t *testing.T) {
 		for _, test := range tests {
@@ -462,7 +477,7 @@ func TestGoVersion(t *testing.T) {
 	t.Run("Lax", func(t *testing.T) {
 		for _, test := range tests {
 			t.Run(test.desc, func(t *testing.T) {
-				if _, err := Parse("go.mod", []byte(test.input), nil); err == nil && !(test.ok || test.laxOK) {
+				if _, err := ParseLax("go.mod", []byte(test.input), nil); err == nil && !(test.ok || test.laxOK) {
 					t.Error("unexpected success")
 				} else if err != nil && test.ok {
 					t.Errorf("unexpected error: %v", err)

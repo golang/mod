@@ -375,6 +375,21 @@ func (f *File) add(errs *ErrorList, block *LineBlock, line *Line, verb string, a
 		f.Go = &Go{Syntax: line}
 		f.Go.Version = args[0]
 
+	case "toolchain":
+		if f.Toolchain != nil {
+			errorf("repeated toolchain statement")
+			return
+		}
+		if len(args) != 1 {
+			errorf("toolchain directive expects exactly one argument")
+			return
+		} else if strict && !ToolchainRE.MatchString(args[0]) {
+			errorf("invalid toolchain version '%s': must match format go1.23 or local", args[0])
+			return
+		}
+		f.Toolchain = &Toolchain{Syntax: line}
+		f.Toolchain.Name = args[0]
+
 	case "module":
 		if f.Module != nil {
 			errorf("repeated module statement")
@@ -622,6 +637,22 @@ func (f *WorkFile) add(errs *ErrorList, line *Line, verb string, args []string, 
 
 		f.Go = &Go{Syntax: line}
 		f.Go.Version = args[0]
+
+	case "toolchain":
+		if f.Toolchain != nil {
+			errorf("repeated toolchain statement")
+			return
+		}
+		if len(args) != 1 {
+			errorf("toolchain directive expects exactly one argument")
+			return
+		} else if !ToolchainRE.MatchString(args[0]) {
+			errorf("invalid toolchain version '%s': must match format go1.23 or local", args[0])
+			return
+		}
+
+		f.Toolchain = &Toolchain{Syntax: line}
+		f.Toolchain.Name = args[0]
 
 	case "use":
 		if len(args) != 1 {

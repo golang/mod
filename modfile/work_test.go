@@ -332,10 +332,7 @@ func TestWorkPrintParse(t *testing.T) {
 
 			pf1, err := ParseWork(base, data, nil)
 			if err != nil {
-				switch base {
-				case "testdata/replace2.in", "testdata/gopkg.in.golden":
-					t.Errorf("should parse %v: %v", base, err)
-				}
+				t.Errorf("should parse %v: %v", base, err)
 			}
 			if err == nil {
 				pf2, err := ParseWork(base, ndata, nil)
