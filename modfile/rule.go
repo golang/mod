@@ -986,6 +986,22 @@ func (f *File) AddGoStmt(version string) error {
 	return nil
 }
 
+// DropGoStmt deletes the go statement from the file.
+func (f *File) DropGoStmt() {
+	if f.Go != nil {
+		f.Go.Syntax.markRemoved()
+		f.Go = nil
+	}
+}
+
+// DropToolchainStmt deletes the toolchain statement from the file.
+func (f *File) DropToolchainStmt() {
+	if f.Toolchain != nil {
+		f.Toolchain.Syntax.markRemoved()
+		f.Toolchain = nil
+	}
+}
+
 func (f *File) AddToolchainStmt(name string) error {
 	if !ToolchainRE.MatchString(name) {
 		return fmt.Errorf("invalid toolchain name %q", name)
@@ -1003,7 +1019,7 @@ func (f *File) AddToolchainStmt(name string) error {
 		}
 	} else {
 		f.Toolchain.Name = name
-		f.Syntax.updateLine(f.Go.Syntax, "toolchain", name)
+		f.Syntax.updateLine(f.Toolchain.Syntax, "toolchain", name)
 	}
 	return nil
 }

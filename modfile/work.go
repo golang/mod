@@ -168,6 +168,22 @@ func (f *WorkFile) AddToolchainStmt(name string) error {
 	return nil
 }
 
+// DropGoStmt deletes the go statement from the file.
+func (f *WorkFile) DropGoStmt() {
+	if f.Go != nil {
+		f.Go.Syntax.markRemoved()
+		f.Go = nil
+	}
+}
+
+// DropToolchainStmt deletes the toolchain statement from the file.
+func (f *WorkFile) DropToolchainStmt() {
+	if f.Toolchain != nil {
+		f.Toolchain.Syntax.markRemoved()
+		f.Toolchain = nil
+	}
+}
+
 func (f *WorkFile) AddUse(diskPath, modulePath string) error {
 	need := true
 	for _, d := range f.Use {

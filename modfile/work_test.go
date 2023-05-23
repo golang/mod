@@ -212,6 +212,53 @@ var workAddGoTests = []struct {
 	},
 }
 
+var workAddToolchainTests = []struct {
+	desc    string
+	in      string
+	version string
+	out     string
+}{
+	{
+		`empty`,
+		``,
+		`go1.17`,
+		`toolchain go1.17
+		`,
+	},
+	{
+		`aftergo`,
+		`// this is a comment
+		use foo
+
+		go 1.17
+
+		use bar
+		`,
+		`go1.17`,
+		`// this is a comment
+		use foo
+
+		go 1.17
+
+		toolchain go1.17
+
+		use bar
+		`,
+	},
+	{
+		`already_have_toolchain`,
+		`go 1.17
+
+		toolchain go1.18
+		`,
+		`go1.19`,
+		`go 1.17
+
+		toolchain go1.19
+		`,
+	},
+}
+
 var workSortBlocksTests = []struct {
 	desc, in, out string
 }{
@@ -279,6 +326,16 @@ func TestWorkAddGo(t *testing.T) {
 		t.Run(tt.desc, func(t *testing.T) {
 			testWorkEdit(t, tt.in, tt.out, func(f *WorkFile) error {
 				return f.AddGoStmt(tt.version)
+			})
+		})
+	}
+}
+
+func TestWorkAddToolchain(t *testing.T) {
+	for _, tt := range workAddToolchainTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			testWorkEdit(t, tt.in, tt.out, func(f *WorkFile) error {
+				return f.AddToolchainStmt(tt.version)
 			})
 		})
 	}

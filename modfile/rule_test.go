@@ -696,6 +696,137 @@ var addGoTests = []struct {
 	},
 }
 
+var dropGoTests = []struct {
+	desc string
+	in   string
+	out  string
+}{
+	{
+		`module_only`,
+		`module m
+		go 1.14
+		`,
+		`module m
+		`,
+	},
+	{
+		`module_before_require`,
+		`module m
+		go 1.14
+		require x.y/a v1.2.3
+		`,
+		`module m
+		require x.y/a v1.2.3
+		`,
+	},
+	{
+		`require_before_module`,
+		`require x.y/a v1.2.3
+		module example.com/inverted
+		go 1.14
+		`,
+		`require x.y/a v1.2.3
+		module example.com/inverted
+		`,
+	},
+	{
+		`require_only`,
+		`require x.y/a v1.2.3
+		go 1.14
+		`,
+		`require x.y/a v1.2.3
+		`,
+	},
+}
+
+var addToolchainTests = []struct {
+	desc    string
+	in      string
+	version string
+	out     string
+}{
+	{
+		`empty`,
+		``,
+		`go1.17`,
+		`toolchain go1.17
+		`,
+	},
+	{
+		`aftergo`,
+		`// this is a comment
+		require x v1.0.0
+
+		go 1.17
+
+		require y v1.0.0
+		`,
+		`go1.17`,
+		`// this is a comment
+		require x v1.0.0
+
+		go 1.17
+
+		toolchain go1.17
+
+		require y v1.0.0
+		`,
+	},
+	{
+		`already_have_toolchain`,
+		`go 1.17
+
+		toolchain go1.18
+		`,
+		`go1.19`,
+		`go 1.17
+
+		toolchain go1.19
+		`,
+	},
+}
+
+var dropToolchainTests = []struct {
+	desc string
+	in   string
+	out  string
+}{
+	{
+		`empty`,
+		`toolchain go1.17
+		`,
+		``,
+	},
+	{
+		`aftergo`,
+		`// this is a comment
+		require x v1.0.0
+
+		go 1.17
+
+		toolchain go1.17
+
+		require y v1.0.0
+		`,
+		`// this is a comment
+		require x v1.0.0
+
+		go 1.17
+
+		require y v1.0.0
+		`,
+	},
+	{
+		`already_have_toolchain`,
+		`go 1.17
+
+		toolchain go1.18
+		`,
+		`go 1.17
+		`,
+	},
+}
+
 var addExcludeTests = []struct {
 	desc    string
 	in      string
@@ -948,7 +1079,7 @@ var retractRationaleTests = []struct {
 		`prefix_one`,
 		`module m
 		//   prefix
-		retract v1.0.0 
+		retract v1.0.0
 		`,
 		`prefix`,
 	},
@@ -959,7 +1090,7 @@ var retractRationaleTests = []struct {
 		//
 		//     two
 		//
-		// three  
+		// three
 		retract v1.0.0`,
 		`one
 
@@ -1083,7 +1214,7 @@ var moduleDeprecatedTests = []struct {
 	{
 		`deprecated_paragraph_space`,
 		`// Deprecated: the next line has a space
-		// 
+		//
 		// c
 		module m`,
 		"the next line has a space",
@@ -1496,6 +1627,38 @@ func TestAddGo(t *testing.T) {
 		t.Run(tt.desc, func(t *testing.T) {
 			testEdit(t, tt.in, tt.out, true, func(f *File) error {
 				return f.AddGoStmt(tt.version)
+			})
+		})
+	}
+}
+
+func TestDropGo(t *testing.T) {
+	for _, tt := range dropGoTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			testEdit(t, tt.in, tt.out, true, func(f *File) error {
+				f.DropGoStmt()
+				return nil
+			})
+		})
+	}
+}
+
+func TestAddToolchain(t *testing.T) {
+	for _, tt := range addToolchainTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			testEdit(t, tt.in, tt.out, true, func(f *File) error {
+				return f.AddToolchainStmt(tt.version)
+			})
+		})
+	}
+}
+
+func TestDropToolchain(t *testing.T) {
+	for _, tt := range dropToolchainTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			testEdit(t, tt.in, tt.out, true, func(f *File) error {
+				f.DropToolchainStmt()
+				return nil
 			})
 		})
 	}
