@@ -35,12 +35,13 @@ import (
 
 // A File is the parsed, interpreted form of a go.mod file.
 type File struct {
-	Module  *Module
-	Go      *Go
-	Require []*Require
-	Exclude []*Exclude
-	Replace []*Replace
-	Retract []*Retract
+	Module    *Module
+	Go        *Go
+	Toolchain *Toolchain
+	Require   []*Require
+	Exclude   []*Exclude
+	Replace   []*Replace
+	Retract   []*Retract
 
 	Syntax *FileSyntax
 }
@@ -56,6 +57,12 @@ type Module struct {
 type Go struct {
 	Version string // "1.23"
 	Syntax  *Line
+}
+
+// A Toolchain is the toolchain statement.
+type Toolchain struct {
+	Name   string // "go1.21rc1"
+	Syntax *Line
 }
 
 // An Exclude is a single exclude statement.
@@ -296,8 +303,12 @@ func parseToFile(file string, data []byte, fix VersionFixer, strict bool) (parse
 	return f, nil
 }
 
-var GoVersionRE = lazyregexp.New(`^([1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
+var GoVersionRE = lazyregexp.New(`^([1-9][0-9]*)\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))?([a-z]+[0-9]+)?$`)
 var laxGoVersionRE = lazyregexp.New(`^v?(([1-9][0-9]*)\.(0|[1-9][0-9]*))([^0-9].*)$`)
+
+// Toolchains must be named beginning with `go1` or containing `-go1` as a substring,
+// like "go1.20.3" or "gccgo-go1.20.3". As a special case, "local" is also permitted.
+var ToolchainRE = lazyregexp.New(`^local$|(^|-)go1`)
 
 func (f *File) add(errs *ErrorList, block *LineBlock, line *Line, verb string, args []string, fix VersionFixer, strict bool) {
 	// If strict is false, this module is a dependency.
@@ -926,7 +937,7 @@ func (f *File) Cleanup() {
 
 func (f *File) AddGoStmt(version string) error {
 	if !GoVersionRE.MatchString(version) {
-		return fmt.Errorf("invalid language version string %q", version)
+		return fmt.Errorf("invalid language version %q", version)
 	}
 	if f.Go == nil {
 		var hint Expr
@@ -940,6 +951,28 @@ func (f *File) AddGoStmt(version string) error {
 	} else {
 		f.Go.Version = version
 		f.Syntax.updateLine(f.Go.Syntax, "go", version)
+	}
+	return nil
+}
+
+func (f *File) AddToolchainStmt(name string) error {
+	if !ToolchainRE.MatchString(name) {
+		return fmt.Errorf("invalid toolchain name %q", name)
+	}
+	if f.Toolchain == nil {
+		var hint Expr
+		if f.Go != nil && f.Go.Syntax != nil {
+			hint = f.Go.Syntax
+		} else if f.Module != nil && f.Module.Syntax != nil {
+			hint = f.Module.Syntax
+		}
+		f.Toolchain = &Toolchain{
+			Name:   name,
+			Syntax: f.Syntax.addLine(hint, "toolchain", name),
+		}
+	} else {
+		f.Toolchain.Name = name
+		f.Syntax.updateLine(f.Go.Syntax, "toolchain", name)
 	}
 	return nil
 }
