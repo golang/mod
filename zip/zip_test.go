@@ -1466,6 +1466,8 @@ func TestCreateFromVCS_basic(t *testing.T) {
 module example.com/foo/bar
 
 go 1.12
+-- LICENSE --
+root license
 -- a.go --
 package a
 
@@ -1482,6 +1484,20 @@ var C = 5
 package c
 
 var D = 5
+-- e/LICENSE --
+e license
+-- e/e.go --
+package e
+
+var E = 5
+-- f/go.mod --
+module example.com/foo/bar/f
+
+go 1.12
+-- f/f.go --
+package f
+
+var F = 5
 -- .gitignore --
 b.go
 c/`)))
@@ -1494,29 +1510,58 @@ c/`)))
 
 	for _, tc := range []struct {
 		desc      string
+		version   module.Version
 		subdir    string
 		wantFiles []string
+		wantData  map[string]string
 	}{
 		{
 			desc:      "from root",
+			version:   module.Version{Path: "example.com/foo/bar", Version: "v0.0.1"},
 			subdir:    "",
-			wantFiles: []string{"go.mod", "a.go", "d/d.go", ".gitignore"},
+			wantFiles: []string{"go.mod", "LICENSE", "a.go", "d/d.go", "e/LICENSE", "e/e.go", ".gitignore"},
+			wantData:  map[string]string{"LICENSE": "root license\n"},
 		},
 		{
-			desc:   "from subdir",
-			subdir: "d/",
+			desc:    "from subdir",
+			version: module.Version{Path: "example.com/foo/bar", Version: "v0.0.1"},
+			subdir:  "d/",
 			// Note: File paths are zipped as if the subdir were the root. ie d.go instead of d/d.go.
-			wantFiles: []string{"d.go"},
+			// subdirs without a license hoist the license from the root
+			wantFiles: []string{"d.go", "LICENSE"},
+			wantData:  map[string]string{"LICENSE": "root license\n"},
+		},
+		{
+			desc:    "from subdir with license",
+			version: module.Version{Path: "example.com/foo/bar", Version: "v0.0.1"},
+			subdir:  "e/",
+			// Note: File paths are zipped as if the subdir were the root. ie e.go instead of e/e.go.
+			// subdirs with a license use their own
+			wantFiles: []string{"LICENSE", "e.go"},
+			wantData:  map[string]string{"LICENSE": "e license\n"},
+		},
+		{
+			desc:    "from submodule subdir",
+			version: module.Version{Path: "example.com/foo/bar/f", Version: "v0.0.1"},
+			subdir:  "f/",
+			// Note: File paths are zipped as if the subdir were the root. ie f.go instead of f/f.go.
+			// subdirs without a license hoist the license from the root
+			wantFiles: []string{"go.mod", "f.go", "LICENSE"},
+			wantData:  map[string]string{"LICENSE": "root license\n"},
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			// Create zip from the directory.
 			tmpZip := &bytes.Buffer{}
 
-			m := module.Version{Path: "example.com/foo/bar", Version: "v0.0.1"}
-
-			if err := modzip.CreateFromVCS(tmpZip, m, tmpDir, "HEAD", tc.subdir); err != nil {
+			if err := modzip.CreateFromVCS(tmpZip, tc.version, tmpDir, "HEAD", tc.subdir); err != nil {
 				t.Fatal(err)
+			}
+
+			wantData := map[string]string{}
+			for f, data := range tc.wantData {
+				p := path.Join(tc.version.String(), f)
+				wantData[p] = data
 			}
 
 			readerAt := bytes.NewReader(tmpZip.Bytes())
@@ -1529,10 +1574,28 @@ c/`)))
 			for _, f := range r.File {
 				gotMap[f.Name] = true
 				gotFiles = append(gotFiles, f.Name)
+
+				if want, ok := wantData[f.Name]; ok {
+					r, err := f.Open()
+					if err != nil {
+						t.Errorf("CreatedFromVCS: error opening %s: %v", f.Name, err)
+						continue
+					}
+					defer r.Close()
+					got, err := io.ReadAll(r)
+					if err != nil {
+						t.Errorf("CreatedFromVCS: error reading %s: %v", f.Name, err)
+						continue
+					}
+					if want != string(got) {
+						t.Errorf("CreatedFromVCS: zipped file %s contains %s, expected %s", f.Name, string(got), want)
+						continue
+					}
+				}
 			}
 			wantMap := map[string]bool{}
 			for _, f := range tc.wantFiles {
-				p := path.Join("example.com", "foo", "bar@v0.0.1", f)
+				p := path.Join(tc.version.String(), f)
 				wantMap[p] = true
 			}
 
@@ -1545,6 +1608,11 @@ c/`)))
 
 			// The things that are missing.
 			for f := range wantMap {
+				if !gotMap[f] {
+					t.Errorf("CreatedFromVCS: zipped file doesn't contain %s, but expected it to. all files: %v", f, gotFiles)
+				}
+			}
+			for f := range wantData {
 				if !gotMap[f] {
 					t.Errorf("CreatedFromVCS: zipped file doesn't contain %s, but expected it to. all files: %v", f, gotFiles)
 				}

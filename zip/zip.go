@@ -56,6 +56,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -653,6 +654,7 @@ func filesInGitRepo(dir, rev, subdir string) ([]File, error) {
 		return nil, err
 	}
 
+	haveLICENSE := false
 	var fs []File
 	for _, zf := range zipReader.File {
 		if !strings.HasPrefix(zf.Name, subdir) || strings.HasSuffix(zf.Name, "/") {
@@ -669,6 +671,23 @@ func filesInGitRepo(dir, rev, subdir string) ([]File, error) {
 			name: n,
 			f:    zf,
 		})
+		if n == "LICENSE" {
+			haveLICENSE = true
+		}
+	}
+
+	if !haveLICENSE && subdir != "" {
+		// Note: this method of extracting the license from the root copied from
+		// https://go.googlesource.com/go/+/refs/tags/go1.20.4/src/cmd/go/internal/modfetch/coderepo.go#1118
+		// https://go.googlesource.com/go/+/refs/tags/go1.20.4/src/cmd/go/internal/modfetch/codehost/git.go#657
+		cmd := exec.Command("git", "cat-file", "blob", rev+":LICENSE")
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "PWD="+dir)
+		stdout := bytes.Buffer{}
+		cmd.Stdout = &stdout
+		if err := cmd.Run(); err == nil {
+			fs = append(fs, dataFile{name: "LICENSE", data: stdout.Bytes()})
+		}
 	}
 
 	return fs, nil
@@ -709,6 +728,26 @@ type zipFile struct {
 func (f zipFile) Path() string                 { return f.name }
 func (f zipFile) Lstat() (os.FileInfo, error)  { return f.f.FileInfo(), nil }
 func (f zipFile) Open() (io.ReadCloser, error) { return f.f.Open() }
+
+type dataFile struct {
+	name string
+	data []byte
+}
+
+func (f dataFile) Path() string                 { return f.name }
+func (f dataFile) Lstat() (os.FileInfo, error)  { return dataFileInfo{f}, nil }
+func (f dataFile) Open() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(f.data)), nil }
+
+type dataFileInfo struct {
+	f dataFile
+}
+
+func (fi dataFileInfo) Name() string       { return path.Base(fi.f.name) }
+func (fi dataFileInfo) Size() int64        { return int64(len(fi.f.data)) }
+func (fi dataFileInfo) Mode() os.FileMode  { return 0644 }
+func (fi dataFileInfo) ModTime() time.Time { return time.Time{} }
+func (fi dataFileInfo) IsDir() bool        { return false }
+func (fi dataFileInfo) Sys() interface{}   { return nil }
 
 // isVendoredPackage attempts to report whether the given filename is contained
 // in a package whose import path contains (but does not end with) the component
