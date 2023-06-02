@@ -109,7 +109,7 @@ func NewClient(ops ClientOps) *Client {
 	}
 }
 
-// init initiailzes the client (if not already initialized)
+// init initializes the client (if not already initialized)
 // and returns any initialization error.
 func (c *Client) init() error {
 	c.initOnce.Do(c.initWork)
