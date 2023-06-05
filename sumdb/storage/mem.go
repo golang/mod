@@ -11,7 +11,7 @@ import (
 	"sync"
 )
 
-// Mem is an in-memory implementation of Storage.
+// Mem is an in-memory implementation of [Storage].
 // It is meant for tests and does not store any data to persistent storage.
 //
 // The zero value is an empty Mem ready for use.

@@ -27,7 +27,7 @@ type Storage interface {
 }
 
 // A Transaction provides read and write operations within a transaction,
-// as executed by Storage's ReadOnly or ReadWrite methods.
+// as executed by [Storage]'s ReadOnly or ReadWrite methods.
 type Transaction interface {
 	// ReadValue reads the value associated with a single key.
 	// If there is no value associated with that key, ReadKey returns an empty value.

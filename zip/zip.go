@@ -10,31 +10,31 @@
 //
 // • All file paths within a zip file must start with "<module>@<version>/",
 // where "<module>" is the module path and "<version>" is the version.
-// The module path must be valid (see golang.org/x/mod/module.CheckPath).
+// The module path must be valid (see [golang.org/x/mod/module.CheckPath]).
 // The version must be valid and canonical (see
-// golang.org/x/mod/module.CanonicalVersion). The path must have a major
+// [golang.org/x/mod/module.CanonicalVersion]). The path must have a major
 // version suffix consistent with the version (see
-// golang.org/x/mod/module.Check). The part of the file path after the
+// [golang.org/x/mod/module.Check]). The part of the file path after the
 // "<module>@<version>/" prefix must be valid (see
-// golang.org/x/mod/module.CheckFilePath).
+// [golang.org/x/mod/module.CheckFilePath]).
 //
 // • No two file paths may be equal under Unicode case-folding (see
-// strings.EqualFold).
+// [strings.EqualFold]).
 //
 // • A go.mod file may or may not appear in the top-level directory. If present,
 // it must be named "go.mod", not any other case. Files named "go.mod"
 // are not allowed in any other directory.
 //
-// • The total size in bytes of a module zip file may be at most MaxZipFile
+// • The total size in bytes of a module zip file may be at most [MaxZipFile]
 // bytes (500 MiB). The total uncompressed size of the files within the
-// zip may also be at most MaxZipFile bytes.
+// zip may also be at most [MaxZipFile] bytes.
 //
 // • Each file's uncompressed size must match its declared 64-bit uncompressed
 // size in the zip file header.
 //
 // • If the zip contains files named "<module>@<version>/go.mod" or
 // "<module>@<version>/LICENSE", their sizes in bytes may be at most
-// MaxGoMod or MaxLICENSE, respectively (both are 16 MiB).
+// [MaxGoMod] or [MaxLICENSE], respectively (both are 16 MiB).
 //
 // • Empty directories are ignored. File permissions and timestamps are also
 // ignored.
@@ -42,7 +42,7 @@
 // • Symbolic links and other irregular files are not allowed.
 //
 // Note that this package does not provide hashing functionality. See
-// golang.org/x/mod/sumdb/dirhash.
+// [golang.org/x/mod/sumdb/dirhash].
 package zip
 
 import (
@@ -118,8 +118,9 @@ type CheckedFiles struct {
 	SizeError error
 }
 
-// Err returns an error if CheckedFiles does not describe a valid module zip
-// file. SizeError is returned if that field is set. A FileErrorList is returned
+// Err returns an error if [CheckedFiles] does not describe a valid module zip
+// file. [CheckedFiles.SizeError] is returned if that field is set.
+// A [FileErrorList] is returned
 // if there are one or more invalid files. Other errors may be returned in the
 // future.
 func (cf CheckedFiles) Err() error {
@@ -322,17 +323,17 @@ func checkFiles(files []File) (cf CheckedFiles, validFiles []File, validSizes []
 }
 
 // CheckDir reports whether the files in dir satisfy the name and size
-// constraints listed in the package documentation. The returned CheckedFiles
+// constraints listed in the package documentation. The returned [CheckedFiles]
 // record contains lists of valid, invalid, and omitted files. If a directory is
 // omitted (for example, a nested module or vendor directory), it will appear in
 // the omitted list, but its files won't be listed.
 //
 // CheckDir returns an error if it encounters an I/O error or if the returned
-// CheckedFiles does not describe a valid module zip file (according to
-// CheckedFiles.Err). The returned CheckedFiles is still populated when such
+// [CheckedFiles] does not describe a valid module zip file (according to
+// [CheckedFiles.Err]). The returned [CheckedFiles] is still populated when such
 // an error is returned.
 //
-// Note that CheckDir will not open any files, so CreateFromDir may still fail
+// Note that CheckDir will not open any files, so [CreateFromDir] may still fail
 // when CheckDir is successful due to I/O errors.
 func CheckDir(dir string) (CheckedFiles, error) {
 	// List files (as CreateFromDir would) and check which ones are omitted
@@ -363,13 +364,13 @@ func CheckDir(dir string) (CheckedFiles, error) {
 // CheckZip reports whether the files contained in a zip file satisfy the name
 // and size constraints listed in the package documentation.
 //
-// CheckZip returns an error if the returned CheckedFiles does not describe
-// a valid module zip file (according to CheckedFiles.Err). The returned
+// CheckZip returns an error if the returned [CheckedFiles] does not describe
+// a valid module zip file (according to [CheckedFiles.Err]). The returned
 // CheckedFiles is still populated when an error is returned. CheckZip will
 // also return an error if the module path or version is malformed or if it
 // encounters an error reading the zip file.
 //
-// Note that CheckZip does not read individual files, so Unzip may still fail
+// Note that CheckZip does not read individual files, so [Unzip] may still fail
 // when CheckZip is successful due to I/O errors.
 func CheckZip(m module.Version, zipFile string) (CheckedFiles, error) {
 	f, err := os.Open(zipFile)
@@ -477,7 +478,7 @@ func checkZip(m module.Version, f *os.File) (*zip.Reader, CheckedFiles, error) {
 // and writes it to w.
 //
 // Create verifies the restrictions described in the package documentation
-// and should not produce an archive that Unzip cannot extract. Create does not
+// and should not produce an archive that [Unzip] cannot extract. Create does not
 // include files in the output archive if they don't belong in the module zip.
 // In particular, Create will not include files in modules found in
 // subdirectories, most files in vendor directories, or irregular files (such
@@ -544,12 +545,12 @@ func Create(w io.Writer, m module.Version, files []File) (err error) {
 // a directory, dir. The zip content is written to w.
 //
 // CreateFromDir verifies the restrictions described in the package
-// documentation and should not produce an archive that Unzip cannot extract.
+// documentation and should not produce an archive that [Unzip] cannot extract.
 // CreateFromDir does not include files in the output archive if they don't
 // belong in the module zip. In particular, CreateFromDir will not include
 // files in modules found in subdirectories, most files in vendor directories,
 // or irregular files (such as symbolic links) in the output archive.
-// Additionally, unlike Create, CreateFromDir will not include directories
+// Additionally, unlike [Create], CreateFromDir will not include directories
 // named ".bzr", ".git", ".hg", or ".svn".
 func CreateFromDir(w io.Writer, m module.Version, dir string) (err error) {
 	defer func() {
@@ -581,8 +582,8 @@ func CreateFromDir(w io.Writer, m module.Version, dir string) (err error) {
 // "sub/dir". To create a zip from the base of the repository, pass an empty
 // string.
 //
-// If CreateFromVCS returns UnrecognizedVCSError, consider falling back to
-// CreateFromDir.
+// If CreateFromVCS returns [UnrecognizedVCSError], consider falling back to
+// [CreateFromDir].
 func CreateFromVCS(w io.Writer, m module.Version, repoRoot, revision, subdir string) (err error) {
 	defer func() {
 		if zerr, ok := err.(*zipError); ok {
