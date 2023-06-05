@@ -553,6 +553,11 @@ func (r *tileReader) ReadTiles(tiles []tlog.Tile) ([][]byte, error) {
 		wg.Add(1)
 		go func(i int, tile tlog.Tile) {
 			defer wg.Done()
+			defer func() {
+				if e := recover(); e != nil {
+					errs[i] = fmt.Errorf("panic: %v", e)
+				}
+			}()
 			data[i], errs[i] = r.c.readTile(tile)
 		}(i, tile)
 	}
