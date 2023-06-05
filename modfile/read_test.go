@@ -459,8 +459,8 @@ func TestParseVersions(t *testing.T) {
 		{desc: "tool", input: "module m\ntoolchain go1.2\n", ok: true},
 		{desc: "tool1", input: "module m\ntoolchain go1.2.3\n", ok: true},
 		{desc: "tool2", input: "module m\ntoolchain go1.2rc1\n", ok: true},
-		{desc: "tool3", input: "module m\ntoolchain gccgo-go1.2rc1\n", ok: true},
-		{desc: "tool4", input: "module m\ntoolchain local\n", ok: true},
+		{desc: "tool3", input: "module m\ntoolchain go1.2rc1-gccgo\n", ok: true},
+		{desc: "tool4", input: "module m\ntoolchain default\n", ok: true},
 		{desc: "tool5", input: "module m\ntoolchain inconceivable!\n", ok: false, laxOK: true},
 	}
 	t.Run("Strict", func(t *testing.T) {
