@@ -581,7 +581,7 @@ func CreateFromDir(w io.Writer, m module.Version, dir string) (err error) {
 // "sub/dir". To create a zip from the base of the repository, pass an empty
 // string.
 //
-// If CreateFromVCS returns ErrUnrecognizedVCS, consider falling back to
+// If CreateFromVCS returns UnrecognizedVCSError, consider falling back to
 // CreateFromDir.
 func CreateFromVCS(w io.Writer, m module.Version, repoRoot, revision, subdir string) (err error) {
 	defer func() {

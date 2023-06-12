@@ -1736,7 +1736,7 @@ var A = 5
 	}
 	var gotErr *modzip.UnrecognizedVCSError
 	if !errors.As(err, &gotErr) {
-		t.Errorf("CreateFromVCS: returned error does not unwrap to modzip.ErrUnrecognisedVCS, but expected it to. returned error: %v", err)
+		t.Errorf("CreateFromVCS: returned error does not unwrap to modzip.UnrecognizedVCSError, but expected it to. returned error: %v", err)
 	} else if gotErr.RepoRoot != tmpDir {
 		t.Errorf("CreateFromVCS: returned error has RepoRoot %q, but want %q. returned error: %v", gotErr.RepoRoot, tmpDir, err)
 	}
