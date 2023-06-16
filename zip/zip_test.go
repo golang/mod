@@ -537,10 +537,11 @@ func TestCreateFromDirSpecial(t *testing.T) {
 			setup: func(t *testing.T, tmpDir string) string {
 				if err := os.Symlink(tmpDir, filepath.Join(tmpDir, "link")); err != nil {
 					switch runtime.GOOS {
-					case "plan9", "windows":
-						t.Skipf("could not create symlink: %v", err)
-					default:
+					case "aix", "android", "darwin", "dragonfly", "freebsd", "illumos", "ios", "js", "linux", "netbsd", "openbsd", "solaris":
+						// Symlinks in tmpDir are always expected to work on these platforms.
 						t.Fatal(err)
+					default:
+						t.Skipf("could not create symlink: %v", err)
 					}
 				}
 				return tmpDir
