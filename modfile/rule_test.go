@@ -1714,6 +1714,72 @@ var dropGodebugTests = []struct {
 	},
 }
 
+var addToolTests = []struct {
+	desc, in, path, want string
+}{
+	{
+		`add_first`,
+		`module example.com/m`,
+		`example.com/tool/v1`,
+		`module example.com/m
+		tool example.com/tool/v1`,
+	},
+	{
+		`sorted_correctly`,
+		`module example.com/m
+		tool example.com/tool2
+		`,
+		`example.com/tool1`,
+		`module example.com/m
+		tool (
+			example.com/tool1
+			example.com/tool2
+		)`,
+	},
+	{
+		`duplicates_ignored`,
+		`module example.com/m
+		tool example.com/tool1
+		`,
+		`example.com/tool1`,
+		`module example.com/m
+		tool example.com/tool1`,
+	},
+}
+
+var dropToolTests = []struct {
+	desc, in, path, want string
+}{
+	{
+		`only`,
+		`module example.com/m
+		tool example.com/tool1`,
+		`example.com/tool1`,
+		`module example.com/m`,
+	},
+	{
+		`parenthesized`,
+		`module example.com/m
+		tool (
+			example.com/tool1
+			example.com/tool2
+		)`,
+		`example.com/tool1`,
+		`module example.com/m
+		tool example.com/tool2`,
+	},
+	{
+		`missing`,
+		`module example.com/m
+		tool (
+		example.com/tool2
+		)`,
+		`example.com/tool1`,
+		`module example.com/m
+		tool example.com/tool2`,
+	},
+}
+
 func fixV(path, version string) (string, error) {
 	if path != "example.com/m" {
 		return "", fmt.Errorf("module path must be example.com/m")
@@ -2051,12 +2117,75 @@ func TestAddOnEmptyFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			got, err := f.Format()
+
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			if !bytes.Equal(got, golden) {
 				t.Fatalf("got:\n%s\nwant:\n%s", got, golden)
+			}
+		})
+	}
+}
+
+func TestAddTool(t *testing.T) {
+	for _, tt := range addToolTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			inFile, err := Parse("in", []byte(tt.in), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := inFile.AddTool(tt.path); err != nil {
+				t.Fatal(err)
+			}
+			inFile.Cleanup()
+			got, err := inFile.Format()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			outFile, err := Parse("out", []byte(tt.want), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := outFile.Format()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+			}
+		})
+	}
+}
+
+func TestDropTool(t *testing.T) {
+	for _, tt := range dropToolTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			inFile, err := Parse("in", []byte(tt.in), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := inFile.DropTool(tt.path); err != nil {
+				t.Fatal(err)
+			}
+			inFile.Cleanup()
+			got, err := inFile.Format()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			outFile, err := Parse("out", []byte(tt.want), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := outFile.Format()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 			}
 		})
 	}
