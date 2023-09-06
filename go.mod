@@ -1,5 +1,5 @@
 module golang.org/x/mod
 
-go 1.17
+go 1.18
 
-require golang.org/x/tools v0.1.12 // tagx:ignore
+require golang.org/x/tools v0.13.0 // tagx:ignore
