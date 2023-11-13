@@ -90,6 +90,24 @@ var addRequireTests = []struct {
 		)
 		`,
 	},
+	{
+		`unattached_comments`,
+		`
+		module m
+		require (
+			foo v0.0.0-00010101000000-000000000000
+			// bar v0.0.0-00010101000000-000000000000
+		)
+		`,
+		"foo", "v0.0.0-00010101000000-000000000000",
+		`
+		module m
+		require (
+			foo v0.0.0-00010101000000-000000000000
+			// bar v0.0.0-00010101000000-000000000000
+		)
+		`,
+	},
 }
 
 type require struct {
