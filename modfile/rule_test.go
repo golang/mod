@@ -1549,6 +1549,20 @@ var fixVersionTests = []struct {
 	},
 }
 
+var modifyEmptyFilesTests = []struct {
+	desc       string
+	operations func(f *File)
+	want       string
+}{
+	{
+		desc: `addGoStmt`,
+		operations: func(f *File) {
+			f.AddGoStmt("1.20")
+		},
+		want: `go 1.20`,
+	},
+}
+
 func fixV(path, version string) (string, error) {
 	if path != "example.com/m" {
 		return "", fmt.Errorf("module path must be example.com/m")
@@ -1842,6 +1856,32 @@ func TestFixVersion(t *testing.T) {
 
 			if !bytes.Equal(got, want) {
 				t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+			}
+		})
+	}
+}
+
+func TestAddOnEmptyFile(t *testing.T) {
+	for _, tt := range modifyEmptyFilesTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			f := &File{}
+			tt.operations(f)
+
+			expect, err := Parse("out", []byte(tt.want), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			golden, err := expect.Format()
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := f.Format()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if !bytes.Equal(got, golden) {
+				t.Fatalf("got:\n%s\nwant:\n%s", got, golden)
 			}
 		})
 	}
