@@ -50,6 +50,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"go/version"
 	"io"
 	"os"
 	"os/exec"
@@ -60,6 +61,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 )
 
@@ -193,6 +195,20 @@ func CheckFiles(files []File) (CheckedFiles, error) {
 	return cf, cf.Err()
 }
 
+// parseGoVers extracts the Go version specified in the given go.mod file.
+// It returns an empty string if the version is not found or if an error
+// occurs during file parsing.
+//
+// The version string is in Go toolchain name syntax, prefixed with "go".
+// Examples: "go1.21", "go1.22rc2", "go1.23.0"
+func parseGoVers(file string, data []byte) string {
+	mfile, err := modfile.ParseLax(file, data, nil)
+	if err != nil || mfile.Go == nil {
+		return ""
+	}
+	return "go" + mfile.Go.Version
+}
+
 // checkFiles implements CheckFiles and also returns lists of valid files and
 // their sizes, corresponding to cf.Valid. It omits files in submodules, files
 // in vendored packages, symlinked files, and various other unwanted files.
@@ -217,6 +233,7 @@ func checkFiles(files []File) (cf CheckedFiles, validFiles []File, validSizes []
 	// Files in these directories will be omitted.
 	// These directories will not be included in the output zip.
 	haveGoMod := make(map[string]bool)
+	var vers string
 	for _, f := range files {
 		p := f.Path()
 		dir, base := path.Split(p)
@@ -226,8 +243,21 @@ func checkFiles(files []File) (cf CheckedFiles, validFiles []File, validSizes []
 				addError(p, false, err)
 				continue
 			}
-			if info.Mode().IsRegular() {
-				haveGoMod[dir] = true
+			if !info.Mode().IsRegular() {
+				continue
+			}
+			haveGoMod[dir] = true
+			// Extract the Go language version from the root "go.mod" file.
+			// This ensures we correctly interpret Go version-specific file omissions.
+			// We use f.Open() to handle potential custom Open() implementations
+			// that the underlying File type might have.
+			if base == "go.mod" && dir == "" {
+				if file, err := f.Open(); err == nil {
+					if data, err := io.ReadAll(file); err == nil {
+						vers = version.Lang(parseGoVers("go.mod", data))
+					}
+					file.Close()
+				}
 			}
 		}
 	}
@@ -257,7 +287,7 @@ func checkFiles(files []File) (cf CheckedFiles, validFiles []File, validSizes []
 			addError(p, false, errPathNotRelative)
 			continue
 		}
-		if isVendoredPackage(p) {
+		if isVendoredPackage(p, vers) {
 			// Skip files in vendored packages.
 			addError(p, true, errVendored)
 			continue
@@ -758,7 +788,17 @@ func (fi dataFileInfo) Sys() interface{}   { return nil }
 //
 // Unfortunately, isVendoredPackage reports false positives for files in any
 // non-top-level package whose import path ends in "vendor".
-func isVendoredPackage(name string) bool {
+// The 'vers' parameter specifies the Go version declared in the module's
+// go.mod file and must be a valid Go version according to the
+// go/version.IsValid function.
+// Vendoring behavior has evolved across Go versions, so this function adapts
+// its logic accordingly.
+func isVendoredPackage(name string, vers string) bool {
+	// vendor/modules.txt is a vendored package but was included in 1.23 and earlier.
+	// Remove vendor/modules.txt only for 1.24 and beyond to preserve older checksums.
+	if version.Compare(vers, "go1.24") >= 0 && name == "vendor/modules.txt" {
+		return true
+	}
 	var i int
 	if strings.HasPrefix(name, "vendor/") {
 		i += len("vendor/")
@@ -894,6 +934,12 @@ func (cc collisionChecker) check(p string, isDir bool) error {
 // files, as well as a list of directories and files that were skipped (for
 // example, nested modules and symbolic links).
 func listFilesInDir(dir string) (files []File, omitted []FileError, err error) {
+	// Extract the Go language version from the root "go.mod" file.
+	// This ensures we correctly interpret Go version-specific file omissions.
+	var vers string
+	if data, err := os.ReadFile(filepath.Join(dir, "go.mod")); err == nil {
+		vers = version.Lang(parseGoVers("go.mod", data))
+	}
 	err = filepath.Walk(dir, func(filePath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -908,7 +954,7 @@ func listFilesInDir(dir string) (files []File, omitted []FileError, err error) {
 		// golang.org/issue/31562, described in isVendoredPackage.
 		// We would like Create and CreateFromDir to produce the same result
 		// for a set of files, whether expressed as a directory tree or zip.
-		if isVendoredPackage(slashPath) {
+		if isVendoredPackage(slashPath, vers) {
 			omitted = append(omitted, FileError{Path: slashPath, Err: errVendored})
 			return nil
 		}

@@ -1,6 +1,7 @@
 -- want --
 valid:
 valid.go
+go.mod
 vendor/modules.txt
 
 omitted:
@@ -10,12 +11,12 @@ sub/go.mod: file is in another module
 
 invalid:
 not/../clean: file path is not clean
-GO.MOD: go.mod files must have lowercase names
 invalid.go': malformed file path "invalid.go'": invalid char '\''
 valid.go: multiple entries for file "valid.go"
 -- valid.go --
 -- not/../clean --
--- GO.MOD --
+-- go.mod --
+go 1.23
 -- invalid.go' --
 -- vendor/x/y --
 -- vendor/modules.txt --
