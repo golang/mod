@@ -1581,6 +1581,139 @@ var modifyEmptyFilesTests = []struct {
 	},
 }
 
+var addGodebugTests = []struct {
+	desc  string
+	in    string
+	key   string
+	value string
+	out   string
+}{
+	{
+		`existing`,
+		`
+		module m
+		godebug key=old
+		`,
+		"key", "new",
+		`
+		module m
+		godebug key=new
+		`,
+	},
+	{
+		`existing2`,
+		`
+		module m
+		godebug (
+			key=first // first
+			other=first-a // first-a
+		)
+		godebug key=second // second
+		godebug (
+			key=third // third
+			other=third-a // third-a
+		)
+		`,
+		"key", "new",
+		`
+		module m
+
+		godebug (
+			key=new // first
+			other=first-a// first-a
+		)
+
+		godebug other=third-a // third-a
+		`,
+	},
+	{
+		`new`,
+		`
+		module m
+		godebug other=foo
+		`,
+		"key", "new",
+		`
+		module m
+		godebug (
+			other=foo
+			key=new
+		)
+		`,
+	},
+	{
+		`new2`,
+		`
+		module m
+		godebug first=1
+		godebug second=2
+		`,
+		"third", "3",
+		`
+		module m
+		godebug first=1
+		godebug (
+			second=2
+			third=3
+		)
+		`,
+	},
+}
+
+var dropGodebugTests = []struct {
+	desc string
+	in   string
+	key  string
+	out  string
+}{
+	{
+		`existing`,
+		`
+		module m
+		godebug key=old
+		`,
+		"key",
+		`
+		module m
+		`,
+	},
+	{
+		`existing2`,
+		`
+		module m
+		godebug (
+			key=first // first
+			other=first-a // first-a
+		)
+		godebug key=second // second
+		godebug (
+			key=third // third
+			other=third-a // third-a
+		)
+		`,
+		"key",
+		`
+		module m
+
+		godebug other=first-a// first-a
+
+		godebug other=third-a // third-a
+		`,
+	},
+	{
+		`new`,
+		`
+		module m
+		godebug other=foo
+		`,
+		"key",
+		`
+		module m
+		godebug other=foo
+		`,
+	},
+}
+
 func fixV(path, version string) (string, error) {
 	if path != "example.com/m" {
 		return "", fmt.Errorf("module path must be example.com/m")
@@ -1593,6 +1726,18 @@ func TestAddRequire(t *testing.T) {
 		t.Run(tt.desc, func(t *testing.T) {
 			testEdit(t, tt.in, tt.out, true, func(f *File) error {
 				err := f.AddRequire(tt.path, tt.vers)
+				f.Cleanup()
+				return err
+			})
+		})
+	}
+}
+
+func TestAddGodebug(t *testing.T) {
+	for _, tt := range addGodebugTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			testEdit(t, tt.in, tt.out, true, func(f *File) error {
+				err := f.AddGodebug(tt.key, tt.value)
 				f.Cleanup()
 				return err
 			})
@@ -1690,6 +1835,18 @@ func TestDropToolchain(t *testing.T) {
 		t.Run(tt.desc, func(t *testing.T) {
 			testEdit(t, tt.in, tt.out, true, func(f *File) error {
 				f.DropToolchainStmt()
+				return nil
+			})
+		})
+	}
+}
+
+func TestDropGodebug(t *testing.T) {
+	for _, tt := range dropGodebugTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			testEdit(t, tt.in, tt.out, true, func(f *File) error {
+				f.DropGodebug(tt.key)
+				f.Cleanup()
 				return nil
 			})
 		})

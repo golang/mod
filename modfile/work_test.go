@@ -352,6 +352,34 @@ func TestWorkSortBlocks(t *testing.T) {
 	}
 }
 
+func TestWorkAddGodebug(t *testing.T) {
+	for _, tt := range addGodebugTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			in := strings.ReplaceAll(tt.in, "module m", "use foo")
+			out := strings.ReplaceAll(tt.out, "module m", "use foo")
+			testWorkEdit(t, in, out, func(f *WorkFile) error {
+				err := f.AddGodebug(tt.key, tt.value)
+				f.Cleanup()
+				return err
+			})
+		})
+	}
+}
+
+func TestWorkDropGodebug(t *testing.T) {
+	for _, tt := range dropGodebugTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			in := strings.ReplaceAll(tt.in, "module m", "use foo")
+			out := strings.ReplaceAll(tt.out, "module m", "use foo")
+			testWorkEdit(t, in, out, func(f *WorkFile) error {
+				f.DropGodebug(tt.key)
+				f.Cleanup()
+				return nil
+			})
+		})
+	}
+}
+
 // Test that when files in the testdata directory are parsed
 // and printed and parsed again, we get the same parse tree
 // both times.
