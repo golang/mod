@@ -6,6 +6,7 @@ package tlog
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"testing"
 )
@@ -265,5 +266,15 @@ func TestTilePath(t *testing.T) {
 			}
 			t.Errorf("ParseTilePath(%q) = %+v, want %+v", tt.path, tile, tt.tile)
 		}
+	}
+}
+
+func TestEmptyTree(t *testing.T) {
+	h, err := TreeHash(0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h != sha256.Sum256(nil) {
+		t.Fatalf("TreeHash(0) = %x, want SHA-256('')", h)
 	}
 }
