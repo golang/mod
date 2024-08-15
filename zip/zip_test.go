@@ -1325,7 +1325,7 @@ func downloadVCSZip(t testing.TB, vcs, url, rev, subdir string) (repoDir string,
 	switch vcs {
 	case "git":
 		// Create a repository and download the revision we want.
-		if _, err := run(t, repoDir, "git", "init", "--bare"); err != nil {
+		if _, err := runWithGitDir(t, repoDir, repoDir, "git", "init", "--bare"); err != nil {
 			return "", nil, err
 		}
 		if err := os.MkdirAll(filepath.Join(repoDir, "info"), 0777); err != nil {
@@ -1342,7 +1342,7 @@ func downloadVCSZip(t testing.TB, vcs, url, rev, subdir string) (repoDir string,
 		if err := attrFile.Close(); err != nil {
 			return "", nil, err
 		}
-		if _, err := run(t, repoDir, "git", "remote", "add", "origin", "--", url); err != nil {
+		if _, err := runWithGitDir(t, repoDir, repoDir, "git", "remote", "add", "origin", "--", url); err != nil {
 			return "", nil, err
 		}
 		var refSpec string
@@ -1351,7 +1351,7 @@ func downloadVCSZip(t testing.TB, vcs, url, rev, subdir string) (repoDir string,
 		} else {
 			refSpec = fmt.Sprintf("%s:refs/dummy", rev)
 		}
-		if _, err := run(t, repoDir, "git", "fetch", "-f", "--depth=1", "origin", refSpec); err != nil {
+		if _, err := runWithGitDir(t, repoDir, repoDir, "git", "fetch", "-f", "--depth=1", "origin", refSpec); err != nil {
 			return "", nil, err
 		}
 
@@ -1368,6 +1368,7 @@ func downloadVCSZip(t testing.TB, vcs, url, rev, subdir string) (repoDir string,
 
 		cmd := exec.Command("git", "-c", "core.autocrlf=input", "-c", "core.eol=lf", "archive", "--format=zip", "--prefix=prefix/", rev, "--", subdirArg)
 		cmd.Dir = repoDir
+		cmd.Env = append(cmd.Environ(), "GIT_DIR="+repoDir)
 		cmd.Stdout = tmpZipFile
 		stderr := new(strings.Builder)
 		cmd.Stderr = stderr
@@ -1425,17 +1426,20 @@ func downloadVCSFile(t testing.TB, vcs, repo, rev, file string) ([]byte, error) 
 	t.Helper()
 	switch vcs {
 	case "git":
-		return run(t, repo, "git", "cat-file", "blob", rev+":"+file)
+		return runWithGitDir(t, repo, repo, "git", "cat-file", "blob", rev+":"+file)
 	default:
 		return nil, fmt.Errorf("vcs %q not supported", vcs)
 	}
 }
 
-func run(t testing.TB, dir string, name string, args ...string) ([]byte, error) {
+func runWithGitDir(t testing.TB, gitDir, dir string, name string, args ...string) ([]byte, error) {
 	t.Helper()
 
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	if gitDir != "" {
+		cmd.Env = append(cmd.Environ(), "GIT_DIR="+gitDir)
+	}
 	stderr := new(strings.Builder)
 	cmd.Stderr = stderr
 
@@ -1448,6 +1452,12 @@ func run(t testing.TB, dir string, name string, args ...string) ([]byte, error) 
 		t.Logf("%v", cmd)
 	}
 	return out, err
+}
+
+func run(t testing.TB, dir string, name string, args ...string) ([]byte, error) {
+	t.Helper()
+
+	return runWithGitDir(t, "", dir, name, args...)
 }
 
 type zipFile struct {

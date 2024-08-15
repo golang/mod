@@ -573,7 +573,9 @@ func CreateFromDir(w io.Writer, m module.Version, dir string) (err error) {
 // VCS repository stored locally. The zip content is written to w.
 //
 // repoRoot must be an absolute path to the base of the repository, such as
-// "/Users/some-user/some-repo".
+// "/Users/some-user/some-repo". If the repository is a Git repository,
+// this path is expected to point to its worktree: it can't be a bare git
+// repo.
 //
 // revision is the revision of the repository to create the zip from. Examples
 // include HEAD or SHA sums for git repositories.
