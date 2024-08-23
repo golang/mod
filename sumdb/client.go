@@ -282,7 +282,7 @@ func (c *Client) Lookup(path, vers string) (lines []string, err error) {
 
 	// Extract the lines for the specific version we want
 	// (with or without /go.mod).
-	prefix := path + " " + vers + " "
+	prefix := path + " " + vers
 	var hashes []string
 	for _, line := range strings.Split(string(result.data), "\n") {
 		if strings.HasPrefix(line, prefix) {
