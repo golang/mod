@@ -15,6 +15,9 @@ import (
 	"unicode/utf8"
 )
 
+// requireToken is the token used for require statements.
+const requireToken = "require"
+
 // A Position describes an arbitrary source position in a file, including the
 // file, line, column, and byte offset.
 type Position struct {
@@ -185,6 +188,108 @@ func (x *FileSyntax) addLine(hint Expr, tokens ...string) *Line {
 	new := &Line{Token: tokens}
 	x.Stmt = append(x.Stmt, new)
 	return new
+}
+
+// requireHint returns a hint for adding a new require line.
+// It tries to maintain the standard order of require blocks, with
+// the first block being the direct requires and the second block
+// being the indirect requires.
+func (x *FileSyntax) requireHint(indirect bool) Expr {
+	if indirect {
+		// Indirect block requested return the first require
+		// block with indirect dependencies.
+		for _, stmt := range x.Stmt {
+			switch stmt := stmt.(type) {
+			case *Line:
+				if stmt.Token != nil && stmt.Token[0] == requireToken && isIndirect(stmt) {
+					return stmt
+				}
+			case *LineBlock:
+				if stmt.Token[0] == requireToken {
+					for _, line := range stmt.Line {
+						if isIndirect(line) {
+							return line
+						}
+					}
+				}
+			}
+		}
+
+		// No indirect require found, append a new block and return
+		// is as the hint. This prevents adding the indirect to an
+		// existing direct block.
+		block := &LineBlock{
+			Token: []string{requireToken},
+		}
+		x.Stmt = append(x.Stmt, block)
+
+		return block
+	}
+
+	// Direct block requested.
+	var last Expr
+	for _, stmt := range x.Stmt {
+		switch stmt := stmt.(type) {
+		case *Line:
+			if stmt.Token != nil && stmt.Token[0] == requireToken {
+				if !isIndirect(stmt) {
+					// Direct require line found, return it as hint to
+					// combine with it.
+					return stmt
+				}
+
+				// Indirect line first, which is unexpected. We return
+				// the last stmt as hint to create a new require block
+				// before it, to try to maintain the standard order.
+				if last != nil {
+					return last
+				}
+
+				// Indirect line at the beginning of the file, prepend
+				// a new require block and return it as hint, to try to
+				// maintain the standard order.
+				block := &LineBlock{
+					Token: []string{requireToken},
+				}
+				x.Stmt = append([]Expr{block}, x.Stmt...)
+
+				return block
+			}
+		case *LineBlock:
+			if stmt.Token[0] == requireToken {
+				for _, line := range stmt.Line {
+					if !isIndirect(line) {
+						// Direct require block found, return it as hint to
+						// combine with it.
+						return line
+					}
+				}
+
+				// Indirect block before first, which is unexpected.
+				// Return the last stmt as hint to create a new require
+				// block before it to try to maintain the standard order.
+				if last != nil {
+					return last
+				}
+
+				// Indirect block at the beginning of the file, which is
+				// unexpected. Prepend a new require block and return it
+				// as hint to try to maintain the standard order.
+				block := &LineBlock{
+					Token: []string{requireToken},
+				}
+				x.Stmt = append([]Expr{block}, x.Stmt...)
+
+				return block
+			}
+		}
+
+		last = stmt
+		continue
+	}
+
+	// No requires found, addLine will create one.
+	return nil
 }
 
 func (x *FileSyntax) updateLine(line *Line, tokens ...string) {
