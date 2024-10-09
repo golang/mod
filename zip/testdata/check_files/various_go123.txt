@@ -8,6 +8,7 @@ omitted:
 vendor/x/y: file is in vendor directory
 sub/go.mod: file is in another module
 .hg_archival.txt: file is inserted by 'hg archive' and is always omitted
+pkg/vendor/vendor.go: file is in vendor directory
 
 invalid:
 not/../clean: file path is not clean
@@ -26,3 +27,4 @@ go 1.23
 duplicate
 -- valid.go --
 another duplicate
+-- pkg/vendor/vendor.go --

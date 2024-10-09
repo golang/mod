@@ -786,8 +786,6 @@ func (fi dataFileInfo) Sys() interface{}   { return nil }
 // in a package whose import path contains (but does not end with) the component
 // "vendor".
 //
-// Unfortunately, isVendoredPackage reports false positives for files in any
-// non-top-level package whose import path ends in "vendor".
 // The 'vers' parameter specifies the Go version declared in the module's
 // go.mod file and must be a valid Go version according to the
 // go/version.IsValid function.
@@ -803,13 +801,27 @@ func isVendoredPackage(name string, vers string) bool {
 	if strings.HasPrefix(name, "vendor/") {
 		i += len("vendor/")
 	} else if j := strings.Index(name, "/vendor/"); j >= 0 {
-		// This offset looks incorrect; this should probably be
+		// Calculate the correct starting position within the import path
+		// to determine if a package is vendored.
 		//
-		// 	i = j + len("/vendor/")
+		// Due to a bug in Go versions before 1.24
+		// (see https://golang.org/issue/37397), the "/vendor/" prefix within
+		// a package path was not always correctly interpreted.
 		//
-		// (See https://golang.org/issue/31562 and https://golang.org/issue/37397.)
-		// Unfortunately, we can't fix it without invalidating module checksums.
-		i += len("/vendor/")
+		// This bug affected how vendored packages were identified in cases like:
+		//
+		//   - "pkg/vendor/vendor.go"   (incorrectly identified as vendored in pre-1.24)
+		//   - "pkg/vendor/foo/foo.go" (correctly identified as vendored)
+		//
+		// To correct this, in Go 1.24 and later, we skip the entire "/vendor/" prefix
+		// when it's part of a nested package path (as in the first example above).
+		// In earlier versions, we only skipped the length of "/vendor/", leading
+		// to the incorrect behavior.
+		if version.Compare(vers, "go1.24") >= 0 {
+			i = j + len("/vendor/")
+		} else {
+			i += len("/vendor/")
+		}
 	} else {
 		return false
 	}
@@ -950,8 +962,7 @@ func listFilesInDir(dir string) (files []File, omitted []FileError, err error) {
 		}
 		slashPath := filepath.ToSlash(relPath)
 
-		// Skip some subdirectories inside vendor, but maintain bug
-		// golang.org/issue/31562, described in isVendoredPackage.
+		// Skip some subdirectories inside vendor.
 		// We would like Create and CreateFromDir to produce the same result
 		// for a set of files, whether expressed as a directory tree or zip.
 		if isVendoredPackage(slashPath, vers) {

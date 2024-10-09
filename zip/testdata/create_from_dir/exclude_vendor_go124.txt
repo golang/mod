@@ -1,6 +1,6 @@
 path=example.com/m
 version=v1.0.0
-hash=h1:WxQ7ERgHLILawPCiuSwXp5UHul7CUSRRftO8b7GTnV8=
+hash=h1:mJR1q75yiMK6+CDw6DuhMS4v4hNoLXqkyk2Cph4VS8Q=
 -- go.mod --
 module example.com/m
 
@@ -13,3 +13,6 @@ see comment in isVendoredPackage and golang.org/issue/31562.
 excluded
 -- sub/vendor/sub.txt --
 excluded
+-- pkg/vendor/vendor.go --
+included
+see comment in isVendoredPackage and golang.org/issue/37397

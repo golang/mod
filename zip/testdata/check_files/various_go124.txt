@@ -2,6 +2,7 @@
 valid:
 valid.go
 go.mod
+pkg/vendor/vendor.go
 
 omitted:
 vendor/x/y: file is in vendor directory
@@ -27,3 +28,4 @@ go 1.23
 duplicate
 -- valid.go --
 another duplicate
+-- pkg/vendor/vendor.go --

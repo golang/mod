@@ -18,42 +18,39 @@ var pre124 []string = []string{
 	"go1.9",
 }
 
+var after124 []string = []string{"go1.24.0", "go1.24", "go1.99.0"}
+
+var allVers []string = append(pre124, after124...)
+
 func TestIsVendoredPackage(t *testing.T) {
 	for _, tc := range []struct {
-		path          string
-		want          bool
-		falsePositive bool // is this case affected by https://golang.org/issue/37397?
-		versions      []string
+		path     string
+		want     bool
+		versions []string
 	}{
-		{path: "vendor/foo/foo.go", want: true, versions: pre124},
-		{path: "pkg/vendor/foo/foo.go", want: true, versions: pre124},
-		{path: "longpackagename/vendor/foo/foo.go", want: true, versions: pre124},
-		{path: "vendor/vendor.go", want: false, versions: pre124},
-		{path: "vendor/foo/modules.txt", want: true, versions: pre124},
-		{path: "modules.txt", want: false, versions: pre124},
-		{path: "vendor/amodules.txt", want: false, versions: pre124},
+		{path: "vendor/foo/foo.go", want: true, versions: allVers},
+		{path: "pkg/vendor/foo/foo.go", want: true, versions: allVers},
+		{path: "longpackagename/vendor/foo/foo.go", want: true, versions: allVers},
+		{path: "vendor/vendor.go", want: false, versions: allVers},
+		{path: "vendor/foo/modules.txt", want: true, versions: allVers},
+		{path: "modules.txt", want: false, versions: allVers},
+		{path: "vendor/amodules.txt", want: false, versions: allVers},
 
 		// These test cases were affected by https://golang.org/issue/63395
 		{path: "vendor/modules.txt", want: false, versions: pre124},
-		{path: "vendor/modules.txt", want: true, versions: []string{"go1.24.0", "go1.24", "go1.99.0"}},
+		{path: "vendor/modules.txt", want: true, versions: after124},
 
-		// We ideally want these cases to be false, but they are affected by
-		// https://golang.org/issue/37397, and if we fix them we will invalidate
-		// existing module checksums. We must leave them as-is-for now.
-		{path: "pkg/vendor/vendor.go", falsePositive: true},
-		{path: "longpackagename/vendor/vendor.go", falsePositive: true},
+		// These test cases were affected by https://golang.org/issue/37397
+		{path: "pkg/vendor/vendor.go", want: true, versions: pre124},
+		{path: "pkg/vendor/vendor.go", want: false, versions: after124},
+		{path: "longpackagename/vendor/vendor.go", want: true, versions: pre124},
+		{path: "longpackagename/vendor/vendor.go", want: false, versions: after124},
 	} {
 		for _, v := range tc.versions {
 			got := isVendoredPackage(tc.path, v)
 			want := tc.want
-			if tc.falsePositive {
-				want = true
-			}
 			if got != want {
 				t.Errorf("isVendoredPackage(%q, %s) = %t; want %t", tc.path, v, got, tc.want)
-			}
-			if tc.falsePositive {
-				t.Logf("(Expected a false-positive due to https://golang.org/issue/37397.)")
 			}
 		}
 	}

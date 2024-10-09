@@ -12,3 +12,6 @@ see comment in isVendoredPackage and golang.org/issue/31562.
 excluded
 -- sub/vendor/sub.txt --
 excluded
+-- pkg/vendor/vendor.go --
+excluded
+see comment in isVendoredPackage and golang.org/issue/37397
