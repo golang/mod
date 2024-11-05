@@ -20,10 +20,11 @@
 package modfile
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -1633,15 +1634,13 @@ func (f *File) SortBlocks() {
 		if !ok {
 			continue
 		}
-		less := lineLess
+		less := compareLine
 		if block.Token[0] == "exclude" && useSemanticSortForExclude {
-			less = lineExcludeLess
+			less = compareLineExclude
 		} else if block.Token[0] == "retract" {
-			less = lineRetractLess
+			less = compareLineRetract
 		}
-		sort.SliceStable(block.Line, func(i, j int) bool {
-			return less(block.Line[i], block.Line[j])
-		})
+		slices.SortStableFunc(block.Line, less)
 	}
 }
 
@@ -1746,39 +1745,38 @@ func removeDups(syntax *FileSyntax, exclude *[]*Exclude, replace *[]*Replace, to
 	syntax.Stmt = stmts
 }
 
-// lineLess returns whether li should be sorted before lj. It sorts
-// lexicographically without assigning any special meaning to tokens.
-func lineLess(li, lj *Line) bool {
+// compareLine compares li and lj. It sorts lexicographically without assigning
+// any special meaning to tokens.
+func compareLine(li, lj *Line) int {
 	for k := 0; k < len(li.Token) && k < len(lj.Token); k++ {
 		if li.Token[k] != lj.Token[k] {
-			return li.Token[k] < lj.Token[k]
+			return cmp.Compare(li.Token[k], lj.Token[k])
 		}
 	}
-	return len(li.Token) < len(lj.Token)
+	return cmp.Compare(len(li.Token), len(lj.Token))
 }
 
-// lineExcludeLess reports whether li should be sorted before lj for lines in
-// an "exclude" block.
-func lineExcludeLess(li, lj *Line) bool {
+// compareLineExclude compares li and lj for lines in an "exclude" block.
+func compareLineExclude(li, lj *Line) int {
 	if len(li.Token) != 2 || len(lj.Token) != 2 {
 		// Not a known exclude specification.
 		// Fall back to sorting lexicographically.
-		return lineLess(li, lj)
+		return compareLine(li, lj)
 	}
 	// An exclude specification has two tokens: ModulePath and Version.
 	// Compare module path by string order and version by semver rules.
 	if pi, pj := li.Token[0], lj.Token[0]; pi != pj {
-		return pi < pj
+		return cmp.Compare(pi, pj)
 	}
-	return semver.Compare(li.Token[1], lj.Token[1]) < 0
+	return semver.Compare(li.Token[1], lj.Token[1])
 }
 
-// lineRetractLess returns whether li should be sorted before lj for lines in
-// a "retract" block. It treats each line as a version interval. Single versions
-// are compared as if they were intervals with the same low and high version.
+// compareLineRetract compares li and lj for lines in a "retract" block.
+// It treats each line as a version interval. Single versions are compared as
+// if they were intervals with the same low and high version.
 // Intervals are sorted in descending order, first by low version, then by
-// high version, using semver.Compare.
-func lineRetractLess(li, lj *Line) bool {
+// high version, using [semver.Compare].
+func compareLineRetract(li, lj *Line) int {
 	interval := func(l *Line) VersionInterval {
 		if len(l.Token) == 1 {
 			return VersionInterval{Low: l.Token[0], High: l.Token[0]}
@@ -1792,9 +1790,9 @@ func lineRetractLess(li, lj *Line) bool {
 	vii := interval(li)
 	vij := interval(lj)
 	if cmp := semver.Compare(vii.Low, vij.Low); cmp != 0 {
-		return cmp > 0
+		return -cmp
 	}
-	return semver.Compare(vii.High, vij.High) > 0
+	return -semver.Compare(vii.High, vij.High)
 }
 
 // checkCanonicalVersion returns a non-nil error if vers is not a canonical

@@ -6,7 +6,7 @@ package modfile
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -315,9 +315,7 @@ func (f *WorkFile) SortBlocks() {
 		if !ok {
 			continue
 		}
-		sort.SliceStable(block.Line, func(i, j int) bool {
-			return lineLess(block.Line[i], block.Line[j])
-		})
+		slices.SortStableFunc(block.Line, compareLine)
 	}
 }
 
