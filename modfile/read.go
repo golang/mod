@@ -865,7 +865,11 @@ func (in *input) parseLineBlock(start Position, token []string, lparen token) *L
 			// Suffix comment, will be attached later by assignComments.
 			in.lex()
 		case '\n':
-			// Blank line. Add an empty comment to preserve it.
+			// Skip blank lines in require block or else add an empty comment to preserve it.
+			if strings.Join(x.Token, " ") == "require" {
+				in.lex()
+				continue
+			}
 			in.lex()
 			if len(comments) == 0 && len(x.Line) > 0 || len(comments) > 0 && comments[len(comments)-1].Token != "" {
 				comments = append(comments, Comment{})

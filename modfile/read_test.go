@@ -734,3 +734,55 @@ func TestCleanupMaintainsRefs(t *testing.T) {
 		t.Errorf("got:\n%v\nwant:\n%v", syntax.Stmt[0], lineB)
 	}
 }
+
+func TestCleanupRemoveRequireBlockBlankLines(t *testing.T) {
+	syntax := &FileSyntax{
+		Stmt: []Expr{
+			&Line{
+				Token: []string{"module", "a"},
+			},
+			&LineBlock{
+				Token: []string{"require"},
+				Line: []*Line{
+					{
+						Token:   []string{"golang.org/x/time", "v0.8.0"},
+						InBlock: true,
+					},
+					{
+						Token:   nil, // Blank line
+						InBlock: true,
+					},
+					{
+						Token:   []string{"golang.org/x/other", "v0.1.0"},
+						InBlock: true,
+					},
+				},
+			},
+		},
+	}
+	syntax.Cleanup()
+
+	buf := &bytes.Buffer{}
+	for _, stmt := range syntax.Stmt {
+		switch stmt := stmt.(type) {
+		case *Line:
+			fmt.Fprintf(buf, "line: %v\n", strings.Join(stmt.Token, " "))
+		case *LineBlock:
+			fmt.Fprintf(buf, "block: %v\n", strings.Join(stmt.Token, " "))
+			for _, line := range stmt.Line {
+				fmt.Fprintf(buf, "blockline: %v\n", strings.Join(line.Token, " "))
+			}
+		}
+	}
+
+	got := strings.TrimSpace(buf.String())
+	want := strings.TrimSpace(`
+line: module a
+block: require
+blockline: golang.org/x/time v0.8.0
+blockline: golang.org/x/other v0.1.0
+`)
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
