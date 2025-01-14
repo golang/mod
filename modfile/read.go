@@ -217,7 +217,8 @@ func (x *FileSyntax) Cleanup() {
 		case *LineBlock:
 			ww := 0
 			for _, line := range stmt.Line {
-				if line.Token != nil {
+				line.Comments = removeEmptyComments(line.Comments)
+				if line.Token != nil || !isEmptyComment(line.Comments) {
 					stmt.Line[ww] = line
 					ww++
 				}
@@ -225,15 +226,17 @@ func (x *FileSyntax) Cleanup() {
 			if ww == 0 {
 				continue
 			}
+			// **Check and remove empty RParen comments**
+			stmt.RParen.Comments = removeEmptyComments(stmt.RParen.Comments)
 			if ww == 1 && len(stmt.RParen.Comments.Before) == 0 {
 				// Collapse block into single line but keep the Line reference used by the
 				// parsed File structure.
 				*stmt.Line[0] = Line{
-					Comments: Comments{
+					Comments: removeEmptyComments(Comments{
 						Before: commentsAdd(stmt.Before, stmt.Line[0].Before),
 						Suffix: commentsAdd(stmt.Line[0].Suffix, stmt.Suffix),
 						After:  commentsAdd(stmt.Line[0].After, stmt.After),
-					},
+					}),
 					Token: stringsAdd(stmt.Token, stmt.Line[0].Token),
 				}
 				x.Stmt[w] = stmt.Line[0]
@@ -246,6 +249,27 @@ func (x *FileSyntax) Cleanup() {
 		w++
 	}
 	x.Stmt = x.Stmt[:w]
+}
+
+// removeEmptyComments removes empty comment sections.
+func removeEmptyComments(c Comments) Comments {
+	// Remove comments with empty tokens and zero position markers
+	var newBefore []Comment
+	for _, cm := range c.Before {
+		if cm.Token != "" || cm.Start.Line != 0 || cm.Start.Byte != 0 {
+			newBefore = append(newBefore, cm)
+		}
+	}
+
+	if len(newBefore) == 0 && len(c.Suffix) == 0 && len(c.After) == 0 {
+		return Comments{}
+	}
+	return Comments{Before: newBefore, Suffix: c.Suffix, After: c.After}
+}
+
+// isEmptyComment checks if a comment structure is completely empty.
+func isEmptyComment(c Comments) bool {
+	return len(c.Before) == 0 && len(c.Suffix) == 0 && len(c.After) == 0
 }
 
 func commentsAdd(x, y []Comment) []Comment {
@@ -865,11 +889,6 @@ func (in *input) parseLineBlock(start Position, token []string, lparen token) *L
 			// Suffix comment, will be attached later by assignComments.
 			in.lex()
 		case '\n':
-			// Skip blank lines in require block or else add an empty comment to preserve it.
-			if strings.Join(x.Token, " ") == "require" {
-				in.lex()
-				continue
-			}
 			in.lex()
 			if len(comments) == 0 && len(x.Line) > 0 || len(comments) > 0 && comments[len(comments)-1].Token != "" {
 				comments = append(comments, Comment{})
