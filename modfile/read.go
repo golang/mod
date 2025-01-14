@@ -217,8 +217,7 @@ func (x *FileSyntax) Cleanup() {
 		case *LineBlock:
 			ww := 0
 			for _, line := range stmt.Line {
-				line.Comments = removeEmptyComments(line.Comments)
-				if line.Token != nil || !isEmptyComment(line.Comments) {
+				if line.Token != nil {
 					stmt.Line[ww] = line
 					ww++
 				}
@@ -265,11 +264,6 @@ func removeEmptyComments(c Comments) Comments {
 		return Comments{}
 	}
 	return Comments{Before: newBefore, Suffix: c.Suffix, After: c.After}
-}
-
-// isEmptyComment checks if a comment structure is completely empty.
-func isEmptyComment(c Comments) bool {
-	return len(c.Before) == 0 && len(c.Suffix) == 0 && len(c.After) == 0
 }
 
 func commentsAdd(x, y []Comment) []Comment {
