@@ -225,8 +225,6 @@ func (x *FileSyntax) Cleanup() {
 			if ww == 0 {
 				continue
 			}
-			// **Check and remove empty RParen comments**
-			stmt.RParen.Comments = removeEmptyComments(stmt.RParen.Comments)
 			if ww == 1 && len(stmt.RParen.Comments.Before) == 0 {
 				// Collapse block into single line but keep the Line reference used by the
 				// parsed File structure.
@@ -248,22 +246,6 @@ func (x *FileSyntax) Cleanup() {
 		w++
 	}
 	x.Stmt = x.Stmt[:w]
-}
-
-// removeEmptyComments removes empty comment sections.
-func removeEmptyComments(c Comments) Comments {
-	// Remove comments with empty tokens and zero position markers
-	var newBefore []Comment
-	for _, cm := range c.Before {
-		if cm.Token != "" || cm.Start.Line != 0 || cm.Start.Byte != 0 {
-			newBefore = append(newBefore, cm)
-		}
-	}
-
-	if len(newBefore) == 0 && len(c.Suffix) == 0 && len(c.After) == 0 {
-		return Comments{}
-	}
-	return Comments{Before: newBefore, Suffix: c.Suffix, After: c.After}
 }
 
 func commentsAdd(x, y []Comment) []Comment {
@@ -895,7 +877,14 @@ func (in *input) parseLineBlock(start Position, token []string, lparen token) *L
 			in.Error(fmt.Sprintf("syntax error (unterminated block started at %s:%d:%d)", in.filename, x.Start.Line, x.Start.LineRune))
 		case ')':
 			rparen := in.lex()
-			x.RParen.Before = comments
+			// Filter out comments with Start.Line == 0
+			var filteredComments []Comment
+			for _, c := range comments {
+				if c.Start.Line > 0 {
+					filteredComments = append(filteredComments, c)
+				}
+			}
+			x.RParen.Before = filteredComments
 			x.RParen.Pos = rparen.pos
 			if !in.peek().isEOL() {
 				in.Error("syntax error (expected newline after closing paren)")
