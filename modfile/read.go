@@ -232,11 +232,11 @@ func (x *FileSyntax) Cleanup() {
 				// Collapse block into single line but keep the Line reference used by the
 				// parsed File structure.
 				*stmt.Line[0] = Line{
-					Comments: removeEmptyComments(Comments{
+					Comments: Comments{
 						Before: commentsAdd(stmt.Before, stmt.Line[0].Before),
 						Suffix: commentsAdd(stmt.Line[0].Suffix, stmt.Suffix),
 						After:  commentsAdd(stmt.Line[0].After, stmt.After),
-					}),
+					},
 					Token: stringsAdd(stmt.Token, stmt.Line[0].Token),
 				}
 				x.Stmt[w] = stmt.Line[0]
@@ -889,6 +889,7 @@ func (in *input) parseLineBlock(start Position, token []string, lparen token) *L
 			// Suffix comment, will be attached later by assignComments.
 			in.lex()
 		case '\n':
+			// Blank line. Add an empty comment to preserve it.
 			in.lex()
 			if len(comments) == 0 && len(x.Line) > 0 || len(comments) > 0 && comments[len(comments)-1].Token != "" {
 				comments = append(comments, Comment{})
