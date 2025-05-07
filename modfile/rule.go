@@ -45,6 +45,7 @@ type File struct {
 	Replace   []*Replace
 	Retract   []*Retract
 	Tool      []*Tool
+	Ignore    []*Ignore
 
 	Syntax *FileSyntax
 }
@@ -97,6 +98,12 @@ type Retract struct {
 
 // A Tool is a single tool statement.
 type Tool struct {
+	Path   string
+	Syntax *Line
+}
+
+// An Ignore is a single ignore statement.
+type Ignore struct {
 	Path   string
 	Syntax *Line
 }
@@ -305,7 +312,7 @@ func parseToFile(file string, data []byte, fix VersionFixer, strict bool) (parse
 					})
 				}
 				continue
-			case "module", "godebug", "require", "exclude", "replace", "retract", "tool":
+			case "module", "godebug", "require", "exclude", "replace", "retract", "tool", "ignore":
 				for _, l := range x.Line {
 					f.add(&errs, x, l, x.Token[0], l.Token, fix, strict)
 				}
@@ -338,7 +345,7 @@ func (f *File) add(errs *ErrorList, block *LineBlock, line *Line, verb string, a
 	// and simply ignore those statements.
 	if !strict {
 		switch verb {
-		case "go", "module", "retract", "require":
+		case "go", "module", "retract", "require", "ignore":
 			// want these even for dependency go.mods
 		default:
 			return
@@ -529,6 +536,21 @@ func (f *File) add(errs *ErrorList, block *LineBlock, line *Line, verb string, a
 			return
 		}
 		f.Tool = append(f.Tool, &Tool{
+			Path:   s,
+			Syntax: line,
+		})
+
+	case "ignore":
+		if len(args) != 1 {
+			errorf("ignore directive expects exactly one argument")
+			return
+		}
+		s, err := parseString(&args[0])
+		if err != nil {
+			errorf("invalid quoted string: %v", err)
+			return
+		}
+		f.Ignore = append(f.Ignore, &Ignore{
 			Path:   s,
 			Syntax: line,
 		})
@@ -1620,6 +1642,36 @@ func (f *File) DropTool(path string) error {
 	return nil
 }
 
+// AddIgnore adds a new ignore directive with the given path.
+// It does nothing if the ignore line already exists.
+func (f *File) AddIgnore(path string) error {
+	for _, t := range f.Ignore {
+		if t.Path == path {
+			return nil
+		}
+	}
+
+	f.Ignore = append(f.Ignore, &Ignore{
+		Path:   path,
+		Syntax: f.Syntax.addLine(nil, "ignore", path),
+	})
+
+	f.SortBlocks()
+	return nil
+}
+
+// DropIgnore removes a ignore directive with the given path.
+// It does nothing if no such ignore directive exists.
+func (f *File) DropIgnore(path string) error {
+	for _, t := range f.Ignore {
+		if t.Path == path {
+			t.Syntax.markRemoved()
+			*t = Ignore{}
+		}
+	}
+	return nil
+}
+
 func (f *File) SortBlocks() {
 	f.removeDups() // otherwise sorting is unsafe
 
@@ -1656,10 +1708,10 @@ func (f *File) SortBlocks() {
 // retract directives are not de-duplicated since comments are
 // meaningful, and versions may be retracted multiple times.
 func (f *File) removeDups() {
-	removeDups(f.Syntax, &f.Exclude, &f.Replace, &f.Tool)
+	removeDups(f.Syntax, &f.Exclude, &f.Replace, &f.Tool, &f.Ignore)
 }
 
-func removeDups(syntax *FileSyntax, exclude *[]*Exclude, replace *[]*Replace, tool *[]*Tool) {
+func removeDups(syntax *FileSyntax, exclude *[]*Exclude, replace *[]*Replace, tool *[]*Tool, ignore *[]*Ignore) {
 	kill := make(map[*Line]bool)
 
 	// Remove duplicate excludes.
@@ -1716,6 +1768,24 @@ func removeDups(syntax *FileSyntax, exclude *[]*Exclude, replace *[]*Replace, to
 			}
 		}
 		*tool = newTool
+	}
+
+	if ignore != nil {
+		haveIgnore := make(map[string]bool)
+		for _, i := range *ignore {
+			if haveIgnore[i.Path] {
+				kill[i.Syntax] = true
+				continue
+			}
+			haveIgnore[i.Path] = true
+		}
+		var newIgnore []*Ignore
+		for _, i := range *ignore {
+			if !kill[i.Syntax] {
+				newIgnore = append(newIgnore, i)
+			}
+		}
+		*ignore = newIgnore
 	}
 
 	// Duplicate require and retract directives are not removed.

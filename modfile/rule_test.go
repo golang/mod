@@ -1780,6 +1780,72 @@ var dropToolTests = []struct {
 	},
 }
 
+var addIgnoreTests = []struct {
+	desc, in, path, want string
+}{
+	{
+		`add_first`,
+		`module example.com/m`,
+		`foo/bar`,
+		`module example.com/m
+		ignore foo/bar`,
+	},
+	{
+		`sorted_correctly`,
+		`module example.com/m
+		ignore foo/bar
+		`,
+		`./foo/bar/path`,
+		`module example.com/m
+		ignore (
+			./foo/bar/path
+			foo/bar
+		)`,
+	},
+	{
+		`duplicates_ignored`,
+		`module example.com/m
+		ignore foo/bar
+		`,
+		`foo/bar`,
+		`module example.com/m
+		ignore foo/bar`,
+	},
+}
+
+var dropIgnoreTests = []struct {
+	desc, in, path, want string
+}{
+	{
+		`only`,
+		`module example.com/m
+		ignore foo/bar`,
+		`foo/bar`,
+		`module example.com/m`,
+	},
+	{
+		`parenthesized`,
+		`module example.com/m
+		ignore (
+			./foo/bar
+			foo/bar
+		)`,
+		`foo/bar`,
+		`module example.com/m
+		ignore ./foo/bar`,
+	},
+	{
+		`missing`,
+		`module example.com/m
+		ignore (
+		foo/bar
+		)`,
+		`./foo/bar`,
+		`module example.com/m
+		ignore foo/bar`,
+	},
+}
+
 func fixV(path, version string) (string, error) {
 	if path != "example.com/m" {
 		return "", fmt.Errorf("module path must be example.com/m")
@@ -2168,6 +2234,68 @@ func TestDropTool(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := inFile.DropTool(tt.path); err != nil {
+				t.Fatal(err)
+			}
+			inFile.Cleanup()
+			got, err := inFile.Format()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			outFile, err := Parse("out", []byte(tt.want), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := outFile.Format()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+			}
+		})
+	}
+}
+
+func TestAddIgnore(t *testing.T) {
+	for _, tt := range addIgnoreTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			inFile, err := Parse("in", []byte(tt.in), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := inFile.AddIgnore(tt.path); err != nil {
+				t.Fatal(err)
+			}
+			inFile.Cleanup()
+			got, err := inFile.Format()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			outFile, err := Parse("out", []byte(tt.want), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := outFile.Format()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+			}
+		})
+	}
+}
+
+func TestDropIgnore(t *testing.T) {
+	for _, tt := range dropIgnoreTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			inFile, err := Parse("in", []byte(tt.in), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := inFile.DropIgnore(tt.path); err != nil {
 				t.Fatal(err)
 			}
 			inFile.Cleanup()
