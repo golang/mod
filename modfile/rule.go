@@ -1167,7 +1167,7 @@ func (f *File) addNewGodebug(key, value string) {
 // other lines for path.
 //
 // If no line currently exists for path, AddRequire adds a new line
-// at the end of the last require block.
+// using AddNewRequire.
 func (f *File) AddRequire(path, vers string) error {
 	need := true
 	for _, r := range f.Require {
@@ -1189,10 +1189,14 @@ func (f *File) AddRequire(path, vers string) error {
 	return nil
 }
 
-// AddNewRequire adds a new require line for path at version vers at the end of
-// the last require block, regardless of any existing require lines for path.
+// AddNewRequire adds a new require line for path at version vers, regardless
+// of any existing require lines for path.
+// Similar to SetRequireSeparateIndirect it attempts to maintain the standard
+// of having direct requires in the first block and indirect requires in the
+// second block.
 func (f *File) AddNewRequire(path, vers string, indirect bool) {
-	line := f.Syntax.addLine(nil, "require", AutoQuote(path), vers)
+	hint := f.Syntax.requireHint(indirect)
+	line := f.Syntax.addLine(hint, "require", AutoQuote(path), vers)
 	r := &Require{
 		Mod:    module.Version{Path: path, Version: vers},
 		Syntax: line,
@@ -1271,6 +1275,12 @@ func (f *File) SetRequire(req []*Require) {
 // If the file initially has one uncommented block of requirements,
 // SetRequireSeparateIndirect will split it into a direct-only and indirect-only
 // block. This aids in the transition to separate blocks.
+//
+// New entries in req must not be added to the file.Require slice before calling
+// otherwise this function will panic. So the calling convention should be along
+// the lines of:
+//
+//	File.SetRequireSeparateIndirect(append(File.Require, newReqs...))
 func (f *File) SetRequireSeparateIndirect(req []*Require) {
 	// hasComments returns whether a line or block has comments
 	// other than "indirect".
