@@ -20,6 +20,11 @@ var pre124 []string = []string{
 
 var after124 []string = []string{"go1.24.0", "go1.24", "go1.99.0"}
 
+var (
+	pre125   = append(pre124, "go1.24.0")
+	after125 = []string{"go1.25.0"}
+)
+
 var allVers []string = append(pre124, after124...)
 
 func TestIsVendoredPackage(t *testing.T) {
@@ -29,8 +34,6 @@ func TestIsVendoredPackage(t *testing.T) {
 		versions []string
 	}{
 		{path: "vendor/foo/foo.go", want: true, versions: allVers},
-		{path: "pkg/vendor/foo/foo.go", want: true, versions: allVers},
-		{path: "longpackagename/vendor/foo/foo.go", want: true, versions: allVers},
 		{path: "vendor/vendor.go", want: false, versions: allVers},
 		{path: "vendor/foo/modules.txt", want: true, versions: allVers},
 		{path: "modules.txt", want: false, versions: allVers},
@@ -45,6 +48,11 @@ func TestIsVendoredPackage(t *testing.T) {
 		{path: "pkg/vendor/vendor.go", want: false, versions: after124},
 		{path: "longpackagename/vendor/vendor.go", want: true, versions: pre124},
 		{path: "longpackagename/vendor/vendor.go", want: false, versions: after124},
+		// allow vendor package names in non-root of the module
+		{path: "pkg/vendor/foo/foo.go", want: true, versions: pre125},
+		{path: "longpackagename/vendor/foo/foo.go", want: true, versions: pre125},
+		{path: "pkg/vendor/foo/foo.go", want: false, versions: after125},
+		{path: "longpackagename/vendor/foo/foo.go", want: false, versions: after125},
 	} {
 		for _, v := range tc.versions {
 			got := isVendoredPackage(tc.path, v)
