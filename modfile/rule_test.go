@@ -13,6 +13,240 @@ import (
 	"golang.org/x/mod/module"
 )
 
+var addNewRequireTests = []struct {
+	desc string
+	in   string
+	mods []require
+	out  string
+}{
+	{
+		`golden`,
+		`module m
+		require (
+			x.y/a v1.2.3
+			x.y/b v1.2.3
+			x.y/c v1.2.3
+		)
+
+		require (
+			x.y/d v1.2.3 // indirect
+			x.y/e v1.2.3 // indirect
+			x.y/f v1.2.3 // indirect
+		)
+		`,
+		[]require{
+			{"x.y/g", "v1.2.3", true},
+			{"x.y/h", "v1.2.3", false},
+			{"x.y/i", "v1.2.3", true},
+			{"x.y/k", "v1.2.3", false},
+		},
+		`module m
+		require (
+			x.y/a v1.2.3
+			x.y/b v1.2.3
+			x.y/c v1.2.3
+			x.y/h v1.2.3
+			x.y/k v1.2.3
+		)
+
+		require (
+			x.y/d v1.2.3 // indirect
+			x.y/e v1.2.3 // indirect
+			x.y/f v1.2.3 // indirect
+			x.y/g v1.2.3 // indirect
+			x.y/i v1.2.3 // indirect
+		)
+		`,
+	},
+	{
+		`empty`,
+		`module m
+		`,
+		[]require{
+			{"x.y/g", "v1.2.3", true},
+			{"x.y/h", "v1.2.3", false},
+			{"x.y/i", "v1.2.3", true},
+			{"x.y/k", "v1.2.3", false},
+		},
+		`module m
+		require (
+			x.y/h v1.2.3
+			x.y/k v1.2.3
+		)
+
+		require (
+			x.y/g v1.2.3 // indirect
+			x.y/i v1.2.3 // indirect
+		)
+		`,
+	},
+	{
+		`empty_direct`,
+		`module m
+		`,
+		[]require{
+			{"x.y/h", "v1.2.3", false},
+			{"x.y/k", "v1.2.3", false},
+		},
+		`module m
+		require (
+			x.y/h v1.2.3
+			x.y/k v1.2.3
+		)
+		`,
+	},
+	{
+		`direct_line`,
+		`module m
+		require x.y/a v1.2.3
+		`,
+		[]require{
+			{"x.y/g", "v1.2.3", true},
+			{"x.y/h", "v1.2.3", false},
+			{"x.y/i", "v1.2.3", true},
+			{"x.y/k", "v1.2.3", false},
+		},
+		`module m
+		require (
+			x.y/a v1.2.3
+			x.y/h v1.2.3
+			x.y/k v1.2.3
+		)
+
+		require (
+			x.y/g v1.2.3 // indirect
+			x.y/i v1.2.3 // indirect
+		)
+		`,
+	},
+	{
+		`direct_block`,
+		`module m
+		require (
+			x.y/a v1.2.3
+			x.y/b v1.2.3
+		)
+		`,
+		[]require{
+			{"x.y/g", "v1.2.3", true},
+			{"x.y/h", "v1.2.3", false},
+			{"x.y/i", "v1.2.3", true},
+			{"x.y/k", "v1.2.3", false},
+		},
+		`module m
+		require (
+			x.y/a v1.2.3
+			x.y/b v1.2.3
+			x.y/h v1.2.3
+			x.y/k v1.2.3
+		)
+
+		require (
+			x.y/g v1.2.3 // indirect
+			x.y/i v1.2.3 // indirect
+		)
+		`,
+	},
+	{
+		`indirect_line`,
+		`module m
+		require x.y/d v1.2.3 // indirect
+		`,
+		[]require{
+			{"x.y/g", "v1.2.3", true},
+			{"x.y/h", "v1.2.3", false},
+			{"x.y/i", "v1.2.3", true},
+			{"x.y/k", "v1.2.3", false},
+		},
+		`module m
+		require (
+			x.y/h v1.2.3
+			x.y/k v1.2.3
+		)
+
+		require (
+			x.y/d v1.2.3 // indirect
+			x.y/g v1.2.3 // indirect
+			x.y/i v1.2.3 // indirect
+		)
+		`,
+	},
+	{
+		`indirect_block`,
+		`module m
+		require (
+			x.y/d v1.2.3 // indirect
+			x.y/e v1.2.3 // indirect
+		)
+		`,
+		[]require{
+			{"x.y/g", "v1.2.3", true},
+			{"x.y/h", "v1.2.3", false},
+			{"x.y/i", "v1.2.3", true},
+			{"x.y/k", "v1.2.3", false},
+		},
+		`module m
+		require (
+			x.y/h v1.2.3
+			x.y/k v1.2.3
+		)
+
+		require (
+			x.y/d v1.2.3 // indirect
+			x.y/e v1.2.3 // indirect
+			x.y/g v1.2.3 // indirect
+			x.y/i v1.2.3 // indirect
+		)
+		`,
+	},
+	{
+		`indirect_block_no_module`,
+		`require (
+			x.y/d v1.2.3 // indirect
+			x.y/e v1.2.3 // indirect
+		)
+		`,
+		[]require{
+			{"x.y/g", "v1.2.3", true},
+			{"x.y/h", "v1.2.3", false},
+			{"x.y/i", "v1.2.3", true},
+			{"x.y/k", "v1.2.3", false},
+		},
+		`require (
+			x.y/h v1.2.3
+			x.y/k v1.2.3
+		)
+
+		require (
+			x.y/d v1.2.3 // indirect
+			x.y/e v1.2.3 // indirect
+			x.y/g v1.2.3 // indirect
+			x.y/i v1.2.3 // indirect
+		)
+		`,
+	},
+	{
+		`no_module`,
+		``,
+		[]require{
+			{"x.y/g", "v1.2.3", true},
+			{"x.y/h", "v1.2.3", false},
+			{"x.y/i", "v1.2.3", true},
+			{"x.y/k", "v1.2.3", false},
+		},
+		`require (
+			x.y/h v1.2.3
+			x.y/k v1.2.3
+		)
+
+		require (
+			x.y/g v1.2.3 // indirect
+			x.y/i v1.2.3 // indirect
+		)
+		`,
+	},
+}
+
 var addRequireTests = []struct {
 	desc string
 	in   string
@@ -83,11 +317,13 @@ var addRequireTests = []struct {
 		"x.y/w", "v1.5.6",
 		`
 		module m
-		require x.y/z v1.2.3
+
 		require (
-			x.y/q/v2 v2.3.4
+			x.y/z v1.2.3
 			x.y/w v1.5.6
 		)
+
+		require x.y/q/v2 v2.3.4
 		`,
 	},
 	{
@@ -222,7 +458,10 @@ var setRequireTests = []struct {
 			{"x.y/g", "v1.2.3", false},
 		},
 		`module m
-		require x.y/a v1.2.3
+		require (
+			x.y/a v1.2.3
+			x.y/h v1.2.3
+		)
 
 		require x.y/b v1.2.3
 
@@ -234,10 +473,7 @@ var setRequireTests = []struct {
 
 		require x.y/f v1.2.3
 
-		require (
-			x.y/g v1.2.3
-			x.y/h v1.2.3
-		)
+		require x.y/g v1.2.3
 		`,
 	},
 	{
@@ -1860,6 +2096,21 @@ func TestAddRequire(t *testing.T) {
 				err := f.AddRequire(tt.path, tt.vers)
 				f.Cleanup()
 				return err
+			})
+		})
+	}
+}
+
+func TestAddNewRequire(t *testing.T) {
+	for _, tt := range addNewRequireTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			testEdit(t, tt.in, tt.out, true, func(f *File) error {
+				for _, mod := range tt.mods {
+					f.AddNewRequire(mod.path, mod.vers, mod.indirect)
+					f.Cleanup()
+					f.SortBlocks()
+				}
+				return nil
 			})
 		})
 	}
