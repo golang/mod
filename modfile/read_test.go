@@ -251,8 +251,8 @@ func (eq *eqchecker) check(v, w interface{}) error {
 }
 
 var (
-	posType      = reflect.TypeOf(Position{})
-	commentsType = reflect.TypeOf(Comments{})
+	posType      = reflect.TypeFor[Position]()
+	commentsType = reflect.TypeFor[Comments]()
 )
 
 // checkValue checks that v and w represent the same parse tree.
