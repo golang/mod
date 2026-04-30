@@ -11,12 +11,16 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"go/build"
+	"go/build/constraint"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1006,7 +1010,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://github.com/rsc/quote",
 			rev:             "v1.0.0",
 			wantContentHash: "h1:haUSojyo3j2M9g7CEUFG8Na09dtn7QKxvPGaPVQdGwM=",
-			wantZipHash:     "5c08ba2c09a364f93704aaa780e7504346102c6ef4fe1333a11f09904a732078",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "da4f6166581725af8622e28d77791121f35ce86f8e1f96b4eb4730a9d21280d1",
+				"//go:build !go1.27": "5c08ba2c09a364f93704aaa780e7504346102c6ef4fe1333a11f09904a732078", // Zip hash prior to CL 707355 ("compress/flate: improve compression speed"). Can be deleted when Go 1.26 becomes unsupported.
+			}),
 		},
 		{
 			m:               module.Version{Path: "rsc.io/quote", Version: "v1.1.0"},
@@ -1014,7 +1021,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://github.com/rsc/quote",
 			rev:             "v1.1.0",
 			wantContentHash: "h1:n/ElL9GOlVEwL0mVjzaYj0UxTI/TX9aQ7lR5LHqP/Rw=",
-			wantZipHash:     "730a5ae6e5c4e216e4f84bb93aa9785a85630ad73f96954ebb5f9daa123dcaa9",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "04ddc8cbf27cc1bf87f971c5b1c53e24c0e35d2556048aa1df7c7a7b2ed6e394",
+				"//go:build !go1.27": "730a5ae6e5c4e216e4f84bb93aa9785a85630ad73f96954ebb5f9daa123dcaa9",
+			}),
 		},
 		{
 			m:               module.Version{Path: "rsc.io/quote", Version: "v1.2.0"},
@@ -1022,7 +1032,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://github.com/rsc/quote",
 			rev:             "v1.2.0",
 			wantContentHash: "h1:fFMCNi0A97hfNrtUZVQKETbuc3h7bmfFQHnjutpPYCg=",
-			wantZipHash:     "fe1bd62652e9737a30d6b7fd396ea13e54ad13fb05f295669eb63d6d33290b06",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "eb464bd19a59393165618e0a31a9c9627da8af72ea066619d1b2a493444d0e5b",
+				"//go:build !go1.27": "fe1bd62652e9737a30d6b7fd396ea13e54ad13fb05f295669eb63d6d33290b06",
+			}),
 		},
 		{
 			m:               module.Version{Path: "rsc.io/quote", Version: "v1.2.1"},
@@ -1030,7 +1043,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://github.com/rsc/quote",
 			rev:             "v1.2.1",
 			wantContentHash: "h1:l+HtgC05eds8qgXNApuv6g1oK1q3B144BM5li1akqXY=",
-			wantZipHash:     "9f0e74de55a6bd20c1567a81e707814dc221f07df176af2a0270392c6faf32fd",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "3e202f48ea14950a08f5cc89106f0aa420616697e61402d78b5c670c980e8664",
+				"//go:build !go1.27": "9f0e74de55a6bd20c1567a81e707814dc221f07df176af2a0270392c6faf32fd",
+			}),
 		},
 		{
 			m:               module.Version{Path: "rsc.io/quote", Version: "v1.3.0"},
@@ -1038,7 +1054,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://github.com/rsc/quote",
 			rev:             "v1.3.0",
 			wantContentHash: "h1:aPUoHx/0Cd7BTZs4SAaknT4TaKryH766GcFTvJjVbHU=",
-			wantZipHash:     "03872ee7d6747bc2ee0abadbd4eb09e60f6df17d0a6142264abe8a8a00af50e7",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "90ff5f6b274f747260acb2bfd35115fdc34c6fb78728fdd79911531822c02f7b",
+				"//go:build !go1.27": "03872ee7d6747bc2ee0abadbd4eb09e60f6df17d0a6142264abe8a8a00af50e7",
+			}),
 		},
 		{
 			m:               module.Version{Path: "rsc.io/quote", Version: "v1.4.0"},
@@ -1046,7 +1065,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://github.com/rsc/quote",
 			rev:             "v1.4.0",
 			wantContentHash: "h1:tYuJspOzwTRMUOX6qmSDRTEKFVV80GM0/l89OLZuVNg=",
-			wantZipHash:     "f60be8193c607bf197da01da4bedb3d683fe84c30de61040eb5d7afaf7869f2e",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "e955cc309ba4796910969684654c8bee45f8ea467f1ed181b693a820a1bb7371",
+				"//go:build !go1.27": "f60be8193c607bf197da01da4bedb3d683fe84c30de61040eb5d7afaf7869f2e",
+			}),
 		},
 		{
 			m:               module.Version{Path: "rsc.io/quote", Version: "v1.5.0"},
@@ -1054,7 +1076,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://github.com/rsc/quote",
 			rev:             "v1.5.0",
 			wantContentHash: "h1:mVjf/WMWxfIw299sOl/O3EXn5qEaaJPMDHMsv7DBDlw=",
-			wantZipHash:     "a2d281834ce159703540da94425fa02c7aec73b88b560081ed0d3681bfe9cd1f",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "5a23c3461bcff3a2182ba19c9ddb7d641c0da3378a6d65b29e16ec7429dd8511",
+				"//go:build !go1.27": "a2d281834ce159703540da94425fa02c7aec73b88b560081ed0d3681bfe9cd1f",
+			}),
 		},
 		{
 			m:               module.Version{Path: "rsc.io/quote", Version: "v1.5.1"},
@@ -1062,7 +1087,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://github.com/rsc/quote",
 			rev:             "v1.5.1",
 			wantContentHash: "h1:ptSemFtffEBvMed43o25vSUpcTVcqxfXU8Jv0sfFVJs=",
-			wantZipHash:     "4ecd78a6d9f571e84ed2baac1688fd150400db2c5b017b496c971af30aaece02",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "fdc567b6bb602f66267d461688295536691a472a57a95d30a6dbc27ec3077047",
+				"//go:build !go1.27": "4ecd78a6d9f571e84ed2baac1688fd150400db2c5b017b496c971af30aaece02",
+			}),
 		},
 		{
 			m:               module.Version{Path: "rsc.io/quote", Version: "v1.5.2"},
@@ -1070,7 +1098,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://github.com/rsc/quote",
 			rev:             "v1.5.2",
 			wantContentHash: "h1:w5fcysjrx7yqtD/aO+QwRjYZOKnaM9Uh2b40tElTs3Y=",
-			wantZipHash:     "643fcf8ef4e4cbb8f910622c42df3f9a81f3efe8b158a05825a81622c121ca0a",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "62f1ad9011d0abbf40fb14cd4d0fab155574da291b7dfeb60b3ac2a9e6f61958",
+				"//go:build !go1.27": "643fcf8ef4e4cbb8f910622c42df3f9a81f3efe8b158a05825a81622c121ca0a",
+			}),
 		},
 		{
 			m:               module.Version{Path: "rsc.io/quote", Version: "v1.5.3-pre1"},
@@ -1078,7 +1109,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://github.com/rsc/quote",
 			rev:             "v1.5.3-pre1",
 			wantContentHash: "h1:c3EJ21kn75/hyrOL/Dvj45+ifxGFSY8Wf4WBcoWTxF0=",
-			wantZipHash:     "24106f0f15384949df51fae5d34191bf120c3b80c1c904721ca2872cf83126b2",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "cef234502eb0dce0ba5ab8abb2c601f5564c4fe938ec4d39cc2be05ac011d787",
+				"//go:build !go1.27": "24106f0f15384949df51fae5d34191bf120c3b80c1c904721ca2872cf83126b2",
+			}),
 		},
 		{
 			m:               module.Version{Path: "rsc.io/quote/v2", Version: "v2.0.1"},
@@ -1086,7 +1120,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://github.com/rsc/quote",
 			rev:             "v2.0.1",
 			wantContentHash: "h1:DF8hmGbDhgiIa2tpqLjHLIKkJx6WjCtLEqZBAU+hACI=",
-			wantZipHash:     "009ed42474a59526fe56a14a9dd02bd7f977d1bd3844398bd209d0da0484aade",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "ae715a163c69369ed3dbfd00deff028e7531d0bfce4bf27215dea31342146709",
+				"//go:build !go1.27": "009ed42474a59526fe56a14a9dd02bd7f977d1bd3844398bd209d0da0484aade",
+			}),
 		},
 		{
 			m:               module.Version{Path: "rsc.io/quote/v3", Version: "v3.0.0"},
@@ -1095,7 +1132,10 @@ func TestVCS(t *testing.T) {
 			rev:             "v3.0.0",
 			subdir:          "v3",
 			wantContentHash: "h1:OEIXClZHFMyx5FdatYfxxpNEvxTqHlu5PNdla+vSYGg=",
-			wantZipHash:     "cf3ff89056b785d7b3ef3a10e984efd83b47d9e65eabe8098b927b3370d5c3eb",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "afa74a797f3e159db044e553d333bcd753d09b02cf52f600d3dc65dcee7b2326",
+				"//go:build !go1.27": "cf3ff89056b785d7b3ef3a10e984efd83b47d9e65eabe8098b927b3370d5c3eb",
+			}),
 		},
 
 		// Test cases from vcs-test.golang.org
@@ -1123,7 +1163,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://go.googlesource.com/arch",
 			rev:             "4e8777c89be4d9e61691fbe5d4e6c8838a7806f3",
 			wantContentHash: "h1:QlVATYS7JBoZMVaf+cNjb90WD/beKVHnIxFKT4QaHVI=",
-			wantZipHash:     "d17551a0c4957180ec1507065d13dcdd0f5cd8bfd7dd735fb81f64f3e2b31b68",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "c6a4647d1a604ce4c17b677fb437f1ed1c5123a70499b866889450dba3655160",
+				"//go:build !go1.27": "d17551a0c4957180ec1507065d13dcdd0f5cd8bfd7dd735fb81f64f3e2b31b68",
+			}),
 		},
 		{
 			m:               module.Version{Path: "golang.org/x/blog", Version: "v0.0.0-20191017104857-0cd0cdff05c2"},
@@ -1131,7 +1174,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://go.googlesource.com/blog",
 			rev:             "0cd0cdff05c251ad0c796cc94d7059e013311fc6",
 			wantContentHash: "h1:IKGICrORhR1aH2xG/WqrnpggSNolSj5urQxggCfmj28=",
-			wantZipHash:     "0fed6b400de54da34b52b464ef2cdff45167236aaaf9a99ba8eba8855036faff",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "a2fad272a9264b42fd309fb5d5ee8100460ee8a4e459b50d19191b4c4e1a5b27",
+				"//go:build !go1.27": "0fed6b400de54da34b52b464ef2cdff45167236aaaf9a99ba8eba8855036faff",
+			}),
 		},
 		{
 			m:               module.Version{Path: "golang.org/x/crypto", Version: "v0.0.0-20191011191535-87dc89f01550"},
@@ -1139,7 +1185,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://go.googlesource.com/crypto",
 			rev:             "87dc89f01550277dc22b74ffcf4cd89fa2f40f4c",
 			wantContentHash: "h1:ObdrDkeb4kJdCP557AjRjq69pTHfNouLtWZG7j9rPN8=",
-			wantZipHash:     "88e47aa05eb25c6abdad7387ccccfc39e74541896d87b7b1269e9dd2fa00100d",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "2c7e512183a38e8d7aba86e20e1a5629b545bff3bae886f9b49f61fdaa1a0ada",
+				"//go:build !go1.27": "88e47aa05eb25c6abdad7387ccccfc39e74541896d87b7b1269e9dd2fa00100d",
+			}),
 		},
 		{
 			m:               module.Version{Path: "golang.org/x/net", Version: "v0.0.0-20191014212845-da9a3fd4c582"},
@@ -1147,7 +1196,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://go.googlesource.com/net",
 			rev:             "da9a3fd4c5820e74b24a6cb7fb438dc9b0dd377c",
 			wantContentHash: "h1:p9xBe/w/OzkeYVKm234g55gMdD1nSIooTir5kV11kfA=",
-			wantZipHash:     "34901a85e6c15475a40457c2393ce66fb0999accaf2d6aa5b64b4863751ddbde",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "dcdb96b6bf56cf11047530c7a93bee1252dafdffc900d1ddd68fd9a7066efcd5",
+				"//go:build !go1.27": "34901a85e6c15475a40457c2393ce66fb0999accaf2d6aa5b64b4863751ddbde",
+			}),
 		},
 		{
 			m:               module.Version{Path: "golang.org/x/sync", Version: "v0.0.0-20190911185100-cd5d95a43a6e"},
@@ -1155,7 +1207,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://go.googlesource.com/sync",
 			rev:             "cd5d95a43a6e21273425c7ae415d3df9ea832eeb",
 			wantContentHash: "h1:vcxGaoTs7kV8m5Np9uUNQin4BrLOthgV7252N8V+FwY=",
-			wantZipHash:     "9c63fe51b0c533b258d3acc30d9319fe78679ce1a051109c9dea3105b93e2eef",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "5821c2f9ec68b279b0f2ff47cbaa3b6940d4a62b21b2e2473f3f3085a8c6156a",
+				"//go:build !go1.27": "9c63fe51b0c533b258d3acc30d9319fe78679ce1a051109c9dea3105b93e2eef",
+			}),
 		},
 		{
 			m:               module.Version{Path: "golang.org/x/sys", Version: "v0.0.0-20191010194322-b09406accb47"},
@@ -1163,7 +1218,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://go.googlesource.com/sys",
 			rev:             "b09406accb4736d857a32bf9444cd7edae2ffa79",
 			wantContentHash: "h1:/XfQ9z7ib8eEJX2hdgFTZJ/ntt0swNk5oYBziWeTCvY=",
-			wantZipHash:     "f26f2993757670b4d1fee3156d331513259757f17133a36966c158642c3f61df",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "be942fcf114e729e4d54ab18a39624218f8ac0ce16f63b6c198d37187f9c1fa0",
+				"//go:build !go1.27": "f26f2993757670b4d1fee3156d331513259757f17133a36966c158642c3f61df",
+			}),
 		},
 		{
 			m:               module.Version{Path: "golang.org/x/talks", Version: "v0.0.0-20191010201600-067e0d331fee"},
@@ -1171,7 +1229,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://go.googlesource.com/talks",
 			rev:             "067e0d331feee4f8d0fa17d47444db533bd904e7",
 			wantContentHash: "h1:8fnBMBUwliuiHuzfFw6kSSx79AzQpqkjZi3FSNIoqYs=",
-			wantZipHash:     "fab2129f3005f970dbf2247378edb3220f6bd36726acdc7300ae3bb0f129e2f2",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "fd76864eec51ab145bcfdb7d5e3cbca30eab69f637397f6c7ccf1c78f1d8a30d",
+				"//go:build !go1.27": "fab2129f3005f970dbf2247378edb3220f6bd36726acdc7300ae3bb0f129e2f2",
+			}),
 		},
 		{
 			m:               module.Version{Path: "golang.org/x/tools", Version: "v0.0.0-20191017205301-920acffc3e65"},
@@ -1179,7 +1240,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://go.googlesource.com/tools",
 			rev:             "920acffc3e65862cb002dae6b227b8d9695e3d29",
 			wantContentHash: "h1:GwXwgmbrvlcHLDsENMqrQTTIC2C0kIPszsq929NruKI=",
-			wantZipHash:     "7f0ab7466448190f8ad1b8cfb05787c3fb08f4a8f9953cd4b40a51c76ddebb28",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "0e9d300762a62ed33dca9ee60df5142a646854a705ee7831d7390e3cb93375c4",
+				"//go:build !go1.27": "7f0ab7466448190f8ad1b8cfb05787c3fb08f4a8f9953cd4b40a51c76ddebb28",
+			}),
 		},
 		{
 			m:               module.Version{Path: "golang.org/x/tour", Version: "v0.0.0-20191002171047-6bb846ce41cd"},
@@ -1187,7 +1251,10 @@ func TestVCS(t *testing.T) {
 			url:             "https://go.googlesource.com/tour",
 			rev:             "6bb846ce41cdca087b14c8e3560a679691c424b6",
 			wantContentHash: "h1:EUlK3Rq8iTkQERnCnveD654NvRJ/ZCM9XCDne+S5cJ8=",
-			wantZipHash:     "d6a7e03e02e5f7714bd12653d319a3b0f6e1099c01b1f9a17bc3613fb31c9170",
+			wantZipHash: match(t, map[string]string{
+				"//go:build go1.27":  "5a7a6c942f386829b5028677c335edc06c533a0ab4c466a01e522505f143e013",
+				"//go:build !go1.27": "d6a7e03e02e5f7714bd12653d319a3b0f6e1099c01b1f9a17bc3613fb31c9170",
+			}),
 		},
 	} {
 		testName := strings.ReplaceAll(test.m.String(), "/", "_")
@@ -1308,6 +1375,26 @@ func TestVCS(t *testing.T) {
 			}
 		})
 	}
+}
+
+// match takes a map whose keys are a Go version query expressed using //go:build constraint syntax,
+// and returns the single value that matches the current Go version.
+func match[T any](t *testing.T, m map[string]T) T {
+	t.Helper()
+	var matches = make([]T, 0, 1)
+	for k, v := range m {
+		c, err := constraint.Parse(k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.Eval(func(tag string) bool { return slices.Contains(build.Default.ReleaseTags, tag) }) {
+			matches = append(matches, v)
+		}
+	}
+	if len(matches) != 1 {
+		t.Fatalf("ambiguous query %q for version %q: got %d matches, want 1", slices.Sorted(maps.Keys(m)), runtime.Version(), len(matches))
+	}
+	return matches[0]
 }
 
 func downloadVCSZip(t testing.TB, vcs, url, rev, subdir string) (repoDir string, dl *os.File, err error) {
