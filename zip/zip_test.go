@@ -1360,17 +1360,19 @@ func TestVCS(t *testing.T) {
 			}
 
 			gotZipHash := hex.EncodeToString(h.Sum(nil))
-			if test.wantZipHash != gotZipHash {
+			if gotZipHash != test.wantZipHash {
 				// If the test fails because the hash of the zip file itself differs,
 				// that may be okay as long as the hash of the data within the zip file
 				// does not change. For example, we might change the compression,
 				// order, or alignment of files without affecting the extracted output.
 				// We shouldn't make such a change unintentionally though, so this
 				// test will fail either way.
-				if gotSum, err := dirhash.HashZip(tmpModZipPath, dirhash.Hash1); err == nil && test.wantContentHash != gotSum {
-					t.Fatalf("zip content hash: got %s, want %s", gotSum, test.wantContentHash)
+				if gotSum, err := dirhash.HashZip(tmpModZipPath, dirhash.Hash1); err != nil {
+					t.Fatal("dirhash.HashZip:", err)
+				} else if gotSum != test.wantContentHash {
+					t.Fatalf("got file with sum %q, want %q", gotSum, test.wantContentHash)
 				} else {
-					t.Fatalf("zip file hash: got %s, want %s", gotZipHash, test.wantZipHash)
+					t.Fatalf("got file with hash %q, want %q (but content has correct sum)", gotZipHash, test.wantZipHash)
 				}
 			}
 		})
