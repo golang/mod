@@ -127,7 +127,7 @@ func TestGenerateKey(t *testing.T) {
 
 	testSignerAndVerifier(t, Name, signer, verifier)
 
-	// Check that GenerateKey returns error from rand reader.
+	// Check that GenerateKey returns an error from rand reader.
 	_, _, err = GenerateKey(iotest.TimeoutReader(iotest.OneByteReader(rand.Reader)), Name)
 	if err == nil {
 		t.Fatalf("GenerateKey succeeded with error-returning rand reader")

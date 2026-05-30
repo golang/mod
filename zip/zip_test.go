@@ -1617,7 +1617,7 @@ c/`)))
 			desc:    "from subdir",
 			version: module.Version{Path: "example.com/foo/bar", Version: "v0.0.1"},
 			subdir:  "d/",
-			// Note: File paths are zipped as if the subdir were the root. ie d.go instead of d/d.go.
+			// Note: File paths are zipped as if the subdir were the root, i.e., d.go instead of d/d.go.
 			// subdirs without a license hoist the license from the root
 			wantFiles: []string{"d.go", "LICENSE"},
 			wantData:  map[string]string{"LICENSE": "root license\n"},
@@ -1626,7 +1626,7 @@ c/`)))
 			desc:    "from subdir with license",
 			version: module.Version{Path: "example.com/foo/bar", Version: "v0.0.1"},
 			subdir:  "e/",
-			// Note: File paths are zipped as if the subdir were the root. ie e.go instead of e/e.go.
+			// Note: File paths are zipped as if the subdir were the root, i.e., e.go instead of e/e.go.
 			// subdirs with a license use their own
 			wantFiles: []string{"LICENSE", "e.go"},
 			wantData:  map[string]string{"LICENSE": "e license\n"},
@@ -1635,7 +1635,7 @@ c/`)))
 			desc:    "from submodule subdir",
 			version: module.Version{Path: "example.com/foo/bar/f", Version: "v0.0.1"},
 			subdir:  "f/",
-			// Note: File paths are zipped as if the subdir were the root. ie f.go instead of f/f.go.
+			// Note: File paths are zipped as if the subdir were the root, i.e., f.go instead of f/f.go.
 			// subdirs without a license hoist the license from the root
 			wantFiles: []string{"go.mod", "f.go", "LICENSE"},
 			wantData:  map[string]string{"LICENSE": "root license\n"},

@@ -11,7 +11,7 @@ import "context"
 type Storage interface {
 	// ReadOnly runs f in a read-only transaction.
 	// It is equivalent to ReadWrite except that the
-	// transaction's BufferWrite method will fail unconditionally.
+	// transaction's BufferWrites method will fail unconditionally.
 	// (The implementation may be able to optimize the
 	// transaction if it knows at the start that no writes will happen.)
 	ReadOnly(ctx context.Context, f func(context.Context, Transaction) error) error
@@ -30,7 +30,7 @@ type Storage interface {
 // as executed by [Storage]'s ReadOnly or ReadWrite methods.
 type Transaction interface {
 	// ReadValue reads the value associated with a single key.
-	// If there is no value associated with that key, ReadKey returns an empty value.
+	// If there is no value associated with that key, ReadValue returns an empty value.
 	// An error is only returned for problems accessing the storage.
 	ReadValue(ctx context.Context, key string) (value string, err error)
 
