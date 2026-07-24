@@ -189,6 +189,55 @@ func TestClientGONOSUMDB(t *testing.T) {
 	}
 }
 
+func TestRejectUnauthenticatedLines(t *testing.T) {
+	tc := newTestClient(t)
+
+	data := "golang.org/x/good v1.0.0 h1:7uVkIFmeBqHfdjD+gZwtXXI+RODJ2Wc4O7MPEh/QiW4=\n"
+	id := tc.treeSize
+	tc.treeSize++
+	rec, err := tlog.FormatRecord(id, []byte(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashes, err := tlog.StoredHashesForRecordHash(id, tlog.RecordHash([]byte(data)), tc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tc.hashes = append(tc.hashes, hashes...)
+
+	// Create lookup result.
+	h, err := tlog.TreeHash(tc.treeSize, tc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := append(tlog.FormatTree(tlog.Tree{N: tc.treeSize, Hash: h}), []byte("golang.org/x/bad v1.0.0 h1:7uVkIFmeBqHfdjD+gZwtXXI+RODJ2Wc4O7MPEh/QiW4=\n")...)
+	signed, err := note.Sign(&note.Note{Text: string(text)}, tc.signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lookupRes := append(rec, signed...)
+	tc.remote["/lookup/golang.org/x/bad@v1.0.0"] = lookupRes
+
+	// Create new tiles.
+	tiles := tlog.NewTiles(tc.tileHeight, id, tc.treeSize)
+	for _, tile := range tiles {
+		data, err := tlog.ReadTileData(tile, tc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tc.remote["/"+tile.Path()] = data
+	}
+
+	lines, err := tc.client.Lookup("golang.org/x/bad", "v1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 0 {
+		t.Errorf("Lookup(%q): expected no hashes, got %q", "golang.org/x/bad", strings.Join(lines, "\n"))
+	}
+}
+
 // A testClient is a self-contained client-side testing environment.
 type testClient struct {
 	t          *testing.T // active test
