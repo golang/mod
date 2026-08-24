@@ -23,6 +23,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -777,6 +778,31 @@ func IsDirectoryPath(ns string) bool {
 		ns == ".." || strings.HasPrefix(ns, "../") || strings.HasPrefix(ns, `..\`) ||
 		strings.HasPrefix(ns, "/") || strings.HasPrefix(ns, `\`) ||
 		len(ns) >= 2 && ('A' <= ns[0] && ns[0] <= 'Z' || 'a' <= ns[0] && ns[0] <= 'z') && ns[1] == ':'
+}
+
+// cleanDirectoryPath returns the directory path ns cleaned lexically: "." and
+// ".." elements and any trailing slash are removed. The leading "./" that
+// IsDirectoryPath relies on to tell a directory path from a module path is
+// restored if cleaning removed it.
+//
+// cleanDirectoryPath must only be called on paths that already satisfy
+// IsDirectoryPath. Paths written with Windows separators or a drive letter are
+// returned unchanged: go.mod files are meant to be portable, and neither
+// path.Clean nor filepath.Clean preserves their meaning on every system.
+func cleanDirectoryPath(ns string) string {
+	if strings.Contains(ns, `\`) || len(ns) >= 2 && ns[1] == ':' {
+		return ns
+	}
+	// Use path.Clean, not filepath.Clean: go.mod paths are slash-separated on
+	// every system, but filepath.Clean rewrites slashes as backslashes when
+	// GOOS=windows.
+	clean := path.Clean(ns)
+	if IsDirectoryPath(clean) {
+		return clean
+	}
+	// path.Clean dropped the leading "./" that distinguished ns from a module
+	// path, for example "./local/" became "local"; restore it.
+	return "./" + clean
 }
 
 // MustQuote reports whether s must be quoted in order to appear as
@@ -1573,6 +1599,10 @@ func (f *File) AddReplace(oldPath, oldVers, newPath, newVers string) error {
 }
 
 func addReplace(syntax *FileSyntax, replace *[]*Replace, oldPath, oldVers, newPath, newVers string) error {
+	if newVers == "" && IsDirectoryPath(newPath) {
+		newPath = cleanDirectoryPath(newPath)
+	}
+
 	need := true
 	old := module.Version{Path: oldPath, Version: oldVers}
 	new := module.Version{Path: newPath, Version: newVers}
