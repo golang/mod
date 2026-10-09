@@ -6,10 +6,6 @@ package tlog
 
 import (
 	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"testing"
 )
@@ -18,20 +14,22 @@ func TestCertificateTransparency(t *testing.T) {
 	// Test that we can verify actual Certificate Transparency proofs.
 	// (The other tests check that we can verify our own proofs;
 	// this is a test that the two are compatible.)
-
-	if testing.Short() {
-		t.Skip("skipping in -short mode")
-	}
+	//
+	// The testdata files are responses from the Google Argon 2020 log
+	// (https://ct.googleapis.com/logs/argon2020/ct/v1/) to the
+	// get-sth, get-entries?start=10000&end=10000, get-proof-by-hash,
+	// and get-sth-consistency?first=3654490 endpoints, with the unused
+	// extra_data field removed from the get-entries response.
 
 	var root ctTree
-	httpGET(t, "http://ct.googleapis.com/logs/argon2020/ct/v1/get-sth", &root)
+	readJSON(t, "testdata/argon2020/sth.json", &root)
 
 	var leaf ctEntries
-	httpGET(t, "http://ct.googleapis.com/logs/argon2020/ct/v1/get-entries?start=10000&end=10000", &leaf)
+	readJSON(t, "testdata/argon2020/entries.json", &leaf)
 	hash := RecordHash(leaf.Entries[0].Data)
 
 	var rp ctRecordProof
-	httpGET(t, "http://ct.googleapis.com/logs/argon2020/ct/v1/get-proof-by-hash?tree_size="+fmt.Sprint(root.Size)+"&hash="+url.QueryEscape(hash.String()), &rp)
+	readJSON(t, "testdata/argon2020/proof.json", &rp)
 
 	err := CheckRecord(rp.Proof, root.Size, root.Hash, 10000, hash)
 	if err != nil {
@@ -39,7 +37,7 @@ func TestCertificateTransparency(t *testing.T) {
 	}
 
 	var tp ctTreeProof
-	httpGET(t, "http://ct.googleapis.com/logs/argon2020/ct/v1/get-sth-consistency?first=3654490&second="+fmt.Sprint(root.Size), &tp)
+	readJSON(t, "testdata/argon2020/consistency.json", &tp)
 
 	oh, _ := ParseHash("AuIZ5V6sDUj1vn3Y1K85oOaQ7y+FJJKtyRTl1edIKBQ=")
 	err = CheckTree(tp.Proof, root.Size, root.Hash, 3654490, oh)
@@ -70,27 +68,12 @@ type ctTreeProof struct {
 	Proof TreeProof `json:"consistency"`
 }
 
-func httpGET(t *testing.T, url string, targ any) {
-	if testing.Verbose() {
-		println()
-		println(url)
-	}
-	resp, err := http.Get(url)
+func readJSON(t *testing.T, name string, targ any) {
+	data, err := os.ReadFile(name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if testing.Verbose() {
-		os.Stdout.Write(data)
-	}
-	err = json.Unmarshal(data, targ)
-	if err != nil {
-		println(url)
-		os.Stdout.Write(data)
-		t.Fatal(err)
+	if err := json.Unmarshal(data, targ); err != nil {
+		t.Fatalf("%s: %v", name, err)
 	}
 }
