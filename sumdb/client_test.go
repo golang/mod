@@ -48,6 +48,12 @@ func TestClientLookup(t *testing.T) {
 	tc.getTileOK = true
 	tc.mustLookup("rsc.io/Quote", "v1.5.2", "rsc.io/Quote v1.5.2 h1:uppercase!=")
 	tc.mustHaveLatest(4)
+
+	// Lookup with !-encoded version: the URL is escaped,
+	// but the record holds the version verbatim.
+	tc.addRecord("rsc.io/quote@v1.5.3-!p!r!e", "rsc.io/quote v1.5.3-PRE h1:uppercase!=\n")
+	tc.mustLookup("rsc.io/quote", "v1.5.3-PRE", "rsc.io/quote v1.5.3-PRE h1:uppercase!=")
+	tc.mustHaveLatest(5)
 }
 
 func TestClientBadTiles(t *testing.T) {
@@ -192,7 +198,9 @@ func TestClientGONOSUMDB(t *testing.T) {
 func TestRejectUnauthenticatedLines(t *testing.T) {
 	tc := newTestClient(t)
 
-	data := "golang.org/x/good v1.0.0 h1:7uVkIFmeBqHfdjD+gZwtXXI+RODJ2Wc4O7MPEh/QiW4=\n"
+	// The logged record holds only the go.mod hash.
+	// The module hash below appears only in the unauthenticated tree note.
+	data := "golang.org/x/bad v1.0.0/go.mod h1:7uVkIFmeBqHfdjD+gZwtXXI+RODJ2Wc4O7MPEh/QiW4=\n"
 	id := tc.treeSize
 	tc.treeSize++
 	rec, err := tlog.FormatRecord(id, []byte(data))
@@ -235,6 +243,82 @@ func TestRejectUnauthenticatedLines(t *testing.T) {
 	}
 	if len(lines) != 0 {
 		t.Errorf("Lookup(%q): expected no hashes, got %q", "golang.org/x/bad", strings.Join(lines, "\n"))
+	}
+}
+
+func TestClientRejectOtherModuleLines(t *testing.T) {
+	tc := newTestClient(t)
+
+	// A logged record, filed under golang.org/x/a@v1.0.0,
+	// that also claims a hash for golang.org/x/b@v1.0.0.
+	const data = "golang.org/x/a v1.0.0 h1:7uVkIFmeBqHfdjD+gZwtXXI+RODJ2Wc4O7MPEh/QiW4=\n" +
+		"golang.org/x/b v1.0.0 h1:T1hPZKmBbMNahiBKFy5HrXp6adAjACjK9JXDnKaTXpA=\n"
+	tc.addRecord("golang.org/x/a@v1.0.0", data)
+
+	// The server answers a lookup for golang.org/x/b with that record.
+	tc.remote["/lookup/golang.org/x/b@v1.0.0"] = tc.remote["/lookup/golang.org/x/a@v1.0.0"]
+
+	for _, path := range []string{"golang.org/x/a", "golang.org/x/b"} {
+		for _, vers := range []string{"v1.0.0", "v1.0.0/go.mod"} {
+			_, err := tc.client.Lookup(path, vers)
+			tc.mustError(err, ErrSecurity.Error())
+		}
+	}
+
+	// The security report names the lookup and the bad line.
+	text := tc.security.String()
+	for _, want := range []string{
+		"SECURITY ERROR",
+		"go.sum database record does not match lookup!",
+		"lookup golang.org/x/b@v1.0.0 returned record",
+		`unexpected line in record for golang.org/x/b@v1.0.0: "golang.org/x/a v1.0.0 h1:`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("cannot find %q in security text:\n%s", want, text)
+		}
+	}
+
+	// The bad record must not be cached.
+	for file := range tc.cache {
+		if strings.Contains(file, "/lookup/") {
+			t.Errorf("bad record cached as %s", file)
+		}
+	}
+}
+
+func TestCheckRecordLines(t *testing.T) {
+	const (
+		path = "rsc.io/quote"
+		h1   = "h1:w5fcysjrx7yqtD/aO+QwRjYZOKnaM9Uh2b40tElTs3Y="
+	)
+	tests := []struct {
+		vers string
+		text string
+		ok   bool
+	}{
+		{"v1.5.2", "rsc.io/quote v1.5.2 " + h1 + "\n", true},
+		{"v1.5.2", "rsc.io/quote v1.5.2 " + h1 + "\nrsc.io/quote v1.5.2/go.mod " + h1 + "\nrsc.io/quote v1.5.2 h2:xyzzy\n", true},
+		{"v1.5.2", "rsc.io/quote v1.5.3 " + h1 + "\n", false},
+		{"v1.5.2", "rsc.io/quote v1.5.2 " + h1 + "\nrsc.io/sampler v1.3.0 " + h1 + "\n", false},
+		{"v1.5.2", "rsc.io/quote/v2 v1.5.2 " + h1 + "\n", false},
+		{"v1.5.2", "rsc.io/quote v1.5.20 " + h1 + "\n", false},
+		{"v1.5.2", "rsc.io/quote v1.5.2-pre " + h1 + "\n", false},
+		{"v1.5.2", "rsc.io/quotes v1.5.2 " + h1 + "\n", false},
+		// Future file checksums are allowed.
+		{"v1.5.2", "rsc.io/quote v1.5.2/LICENSE " + h1 + "\n", true},
+		{"v1.5.2", "rsc.io/quote v1.5.2/go.mod/go.mod " + h1 + "\n", true},
+		{"v1.5.2", "rsc.io/quote v1.5.2/ " + h1 + "\n", false},
+		{"v1.5.2", "rsc.io/quote v1.5.2/LICENSE\n", false},
+		{"v1.5.2", "rsc.io/quote v1.5.2  " + h1 + "\n", false},
+		{"v1.5.2", "rsc.io/quote v1.5.2 \n", false},
+		{"v1.5.2", "rsc.io/quote v1.5.2 " + h1 + " extra\n", false},
+		{"v1.5.2", "rsc.io/quote v1.5.2\n", false},
+	}
+	for _, tt := range tests {
+		err := checkRecordLines(path, tt.vers, []byte(tt.text))
+		if (err == nil) != tt.ok {
+			t.Errorf("checkRecordLines(%q, %q, %q) = %v, want ok=%v", path, tt.vers, tt.text, err, tt.ok)
+		}
 	}
 }
 
