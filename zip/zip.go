@@ -56,6 +56,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -797,6 +798,13 @@ func isVendoredPackage(name string, vers string) bool {
 	if version.Compare(vers, "go1.24") >= 0 && name == "vendor/modules.txt" {
 		return true
 	}
+
+	if version.Compare(vers, "go1.25") >= 0 {
+		// ref: https://golang.org/issues/71785
+		// allows non-top-level vendor packages.
+		return regexp.MustCompile("^vendor/.*/").MatchString(name)
+	}
+
 	var i int
 	if strings.HasPrefix(name, "vendor/") {
 		i += len("vendor/")
