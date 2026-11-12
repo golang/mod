@@ -2410,6 +2410,125 @@ func TestDropGodebug(t *testing.T) {
 	}
 }
 
+var addReplaceTests = []struct {
+	desc    string
+	in      string
+	oldPath string
+	oldVers string
+	newPath string
+	newVers string
+	out     string
+}{
+	{
+		`dotSlash`,
+		`
+		module m
+		`,
+		"x.y/z", "", "./sub/../local", "",
+		`
+		module m
+
+		replace x.y/z => ./local
+		`,
+	},
+	{
+		`trailingSlash`,
+		`
+		module m
+		`,
+		"x.y/z", "", "./local/", "",
+		`
+		module m
+
+		replace x.y/z => ./local
+		`,
+	},
+	{
+		`dotDotSlash`,
+		`
+		module m
+		`,
+		"x.y/z", "", "../local/./sub/..", "",
+		`
+		module m
+
+		replace x.y/z => ../local
+		`,
+	},
+	{
+		`alreadyClean`,
+		`
+		module m
+		`,
+		"x.y/z", "", "./local", "",
+		`
+		module m
+
+		replace x.y/z => ./local
+		`,
+	},
+	{
+		`modulePathUnaffected`,
+		`
+		module m
+		`,
+		"x.y/z", "", "x.y/w", "v1.2.3",
+		`
+		module m
+
+		replace x.y/z => x.y/w v1.2.3
+		`,
+	},
+}
+
+func TestAddReplace(t *testing.T) {
+	for _, tt := range addReplaceTests {
+		t.Run(tt.desc, func(t *testing.T) {
+			testEdit(t, tt.in, tt.out, true, func(f *File) error {
+				return f.AddReplace(tt.oldPath, tt.oldVers, tt.newPath, tt.newVers)
+			})
+		})
+	}
+}
+
+var cleanDirectoryPathTests = []struct {
+	in, want string
+}{
+	{"./local", "./local"},
+	{"./local/", "./local"},
+	{"./sub/../local", "./local"},
+	{"./sub/./local", "./sub/local"},
+	{"../local/./sub/..", "../local"},
+	{"..", ".."},
+	{".", "."},
+	{"./", "."},
+	{"/rooted/sub/../dir", "/rooted/dir"},
+	// Windows-style paths are left alone: go.mod files are portable, and
+	// cleaning them is not meaning-preserving on every system.
+	{`..\local\`, `..\local\`},
+	{`C:\local\`, `C:\local\`},
+	{"C:/local/", "C:/local/"},
+}
+
+func TestCleanDirectoryPath(t *testing.T) {
+	for _, tt := range cleanDirectoryPathTests {
+		t.Run(tt.in, func(t *testing.T) {
+			if !IsDirectoryPath(tt.in) {
+				t.Fatalf("IsDirectoryPath(%q) = false, want true", tt.in)
+			}
+			got := cleanDirectoryPath(tt.in)
+			if got != tt.want {
+				t.Errorf("cleanDirectoryPath(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+			// Cleaning must never turn a directory path into something that
+			// would be read back as a module path.
+			if !IsDirectoryPath(got) {
+				t.Errorf("IsDirectoryPath(cleanDirectoryPath(%q)) = false, want true", tt.in)
+			}
+		})
+	}
+}
+
 func TestAddExclude(t *testing.T) {
 	for _, tt := range addExcludeTests {
 		t.Run(tt.desc, func(t *testing.T) {
